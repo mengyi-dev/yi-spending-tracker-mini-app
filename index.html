@@ -475,7 +475,7 @@
                             buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ]
                         }, (buttonId) => {
                             if (buttonId === 'edit') { openModal(expense); }
-                            else if (buttonId === 'delete') { deleteExpense(id); }
+                            else if (buttonId === 'delete') { deleteExpense(expense.id); } // Fixed: Use expense.id instead of undefined id
                         });
                     }
                 }
