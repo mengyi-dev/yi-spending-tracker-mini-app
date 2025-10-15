@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="km">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>កម្មវិធីតាមដានចំណាយប្រចាំថ្ងៃ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f2f2f7;
+            --text-color: #000000;
+            --hint-color: #999999;
+            --button-color: #007aff;
+            --button-text-color: #ffffff;
+            --secondary-bg-color: #ffffff;
+            --danger-color: #ff3b30;
+        }
+        
+        html, body {
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            font-family: 'Kantumruy Pro', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overscroll-behavior: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #app-container {
+            height: 100vh;
+            overflow-y: auto;
+            background-color: var(--bg-color);
+        }
+
+        .header {
+            background-color: var(--secondary-bg-color);
+            padding: 1rem;
+            border-bottom: 1px solid var(--bg-color);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .date-header {
+            padding: 0.75rem 1rem 0.25rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .content-card {
+            background-color: var(--secondary-bg-color);
+            margin: 0 1rem 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        
+        .list-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--bg-color);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .list-item:last-child {
+            border-bottom: none;
+        }
+        .list-item:active {
+            background-color: var(--bg-color);
+        }
+
+        .fab {
+            position: fixed;
+            bottom: calc(2rem + env(safe-area-inset-bottom, 0));
+            right: 2rem;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background-color: var(--button-color);
+            color: var(--button-text-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            cursor: pointer;
+            transition: transform 0.2s ease, opacity 0.3s ease;
+            z-index: 15;
+        }
+        .fab:active {
+            transform: scale(0.95);
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0,0,0,0.4);
+            transition: opacity 0.3s ease;
+            z-index: 20;
+        }
+
+        .modal-content {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-color);
+            border-top-left-radius: 1.25rem;
+            border-top-right-radius: 1.25rem;
+            padding: 1rem;
+            padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 30;
+        }
+        .modal-content.open {
+            transform: translateY(0);
+        }
+        .modal-handle {
+            width: 40px;
+            height: 5px;
+            background-color: var(--hint-color);
+            border-radius: 2.5px;
+            margin: 0.25rem auto 1rem;
+            opacity: 0.5;
+        }
+        
+        input[type="date"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background: transparent;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <header class="header">
+            <p id="welcome-message" class="text-lg font-semibold mb-4">សូមស្វាគមន៍!</p>
+            <div class="grid grid-cols-3 gap-2 text-center">
+                <div>
+                    <p class="text-sm" style="color: var(--hint-color);">ថ្ងៃនេះ</p>
+                    <p id="total-today" class="font-bold text-lg">៛០</p>
+                </div>
+                <div>
+                    <p class="text-sm" style="color: var(--hint-color);">សប្តាហ៍នេះ</p>
+                    <p id="total-week" class="font-bold text-lg">៛០</p>
+                </div>
+                <div>
+                    <p class="text-sm" style="color: var(--hint-color);">ខែនេះ</p>
+                    <p id="total-month" class="font-bold text-lg">៛០</p>
+                </div>
+            </div>
+        </header>
+
+        <main id="main-content" class="pb-32">
+             <div class="content-card p-4 mt-4">
+                <h2 class="text-lg font-semibold mb-2">ចំណាយប្រចាំខែនេះ</h2>
+                <canvas id="expense-chart"></canvas>
+             </div>
+             <div id="history-placeholder" class="text-center py-16 px-4" style="color: var(--hint-color);">
+                <p class="text-lg">មិនទាន់មានការចំណាយទេ។</p>
+                <p class="mt-2">ចុចប៊ូតុង (+) ដើម្បីបន្ថែមការចំណាយដំបូងរបស់អ្នក។</p>
+            </div>
+        </main>
+
+        <div id="fab" class="fab">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </div>
+    </div>
+
+    <!-- Expense Modal -->
+    <div id="modal-overlay" class="modal-overlay hidden"></div>
+    <div id="modal-content" class="modal-content">
+        <div class="modal-handle"></div>
+        <h2 id="modal-title" class="text-xl font-bold text-center mb-4"></h2>
+        <form id="expense-form" class="space-y-4">
+            <input type="number" id="amount-input" placeholder="៛០" class="w-full text-4xl font-bold p-2 text-center border-0 bg-transparent" required>
+            <div class="grid grid-cols-2 gap-4">
+                <select id="category-select" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required></select>
+                <input type="date" id="date-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required>
+            </div>
+            <input type="text" id="notes-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" placeholder="កំណត់ចំណាំ (បើមាន)">
+            <input type="hidden" id="expense-id-input">
+        </form>
+    </div>
+
+    <script>
+        function initializeApp() {
+            const tg = window.Telegram.WebApp;
+            const isStorageSupported = tg.isVersionAtLeast('6.9');
+
+            const state = {
+                expenses: [],
+                categories: [
+                    { id: 'food', name: 'អាហារ', icon: '🍔', color: '#FF6384' },
+                    { id: 'transport', name: 'ការធ្វើដំណើរ', icon: '🛵', color: '#36A2EB' },
+                    { id: 'bills', name: 'វិក្កយបត្រ', icon: '🧾', color: '#FFCE56' },
+                    { id: 'shopping', name: 'ការដើរទិញឥវ៉ាន់', icon: '🛍️', color: '#4BC0C0' },
+                    { id: 'entertainment', name: 'ការកម្សាន្ត', icon: '🎬', color: '#9966FF' },
+                    { id: 'other', name: 'ផ្សេងៗ', icon: '💸', color: '#C9CBCF' },
+                ],
+                chartInstance: null,
+            };
+            
+            // UI Elements
+            const welcomeMessageEl = document.getElementById('welcome-message');
+            const totalTodayEl = document.getElementById('total-today');
+            const totalWeekEl = document.getElementById('total-week');
+            const totalMonthEl = document.getElementById('total-month');
+            const mainContent = document.getElementById('main-content');
+            const historyPlaceholder = document.getElementById('history-placeholder');
+            const chartCanvas = document.getElementById('expense-chart').getContext('2d');
+            const fab = document.getElementById('fab');
+
+            // Modal Elements
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalContent = document.getElementById('modal-content');
+            const modalTitle = document.getElementById('modal-title');
+            const expenseForm = document.getElementById('expense-form');
+            const amountInput = document.getElementById('amount-input');
+            const categorySelect = document.getElementById('category-select');
+            const dateInput = document.getElementById('date-input');
+            const notesInput = document.getElementById('notes-input');
+            const expenseIdInput = document.getElementById('expense-id-input');
+
+            // --- UI Rendering ---
+            function applyTheme() {
+                const themeParams = tg.themeParams;
+                const styles = {
+                    '--bg-color': themeParams.secondary_bg_color || '#f2f2f7',
+                    '--text-color': themeParams.text_color || '#000000',
+                    '--hint-color': themeParams.hint_color || '#999999',
+                    '--button-color': themeParams.button_color || '#007aff',
+                    '--button-text-color': themeParams.button_text_color || '#ffffff',
+                    '--secondary-bg-color': themeParams.bg_color || '#ffffff',
+                };
+                for (const [key, value] of Object.entries(styles)) {
+                    document.documentElement.style.setProperty(key, value);
+                }
+                tg.setHeaderColor(themeParams.bg_color || '#ffffff');
+            }
+            
+            const formatCurrency = (amount) => new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
+
+            function render() {
+                renderSummaries();
+                renderExpenseHistory();
+                renderCategoriesInDropdown();
+                renderChart();
+            }
+
+            function renderSummaries() {
+                const now = new Date();
+                const todayStr = now.toISOString().slice(0, 10);
+                const startOfWeek = new Date(now);
+                startOfWeek.setDate(now.getDate() - (now.getDay() || 7) + 1);
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+                const totalToday = state.expenses.filter(e => e.date.startsWith(todayStr)).reduce((s, e) => s + e.amount, 0);
+                const totalWeek = state.expenses.filter(e => new Date(e.date) >= startOfWeek).reduce((s, e) => s + e.amount, 0);
+                const totalMonth = state.expenses.filter(e => new Date(e.date) >= startOfMonth).reduce((s, e) => s + e.amount, 0);
+
+                totalTodayEl.textContent = formatCurrency(totalToday);
+                totalWeekEl.textContent = formatCurrency(totalWeek);
+                totalMonthEl.textContent = formatCurrency(totalMonth);
+            }
+
+            function renderChart() {
+                const now = new Date();
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const monthlyExpenses = state.expenses.filter(e => new Date(e.date) >= startOfMonth);
+                const categoryTotals = state.categories.map(cat => ({
+                    ...cat,
+                    total: monthlyExpenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0)
+                })).filter(cat => cat.total > 0);
+
+                if (state.chartInstance) state.chartInstance.destroy();
+                state.chartInstance = new Chart(chartCanvas, {
+                    type: 'pie', data: {
+                        labels: categoryTotals.map(c => c.name),
+                        datasets: [{
+                            data: categoryTotals.map(c => c.total),
+                            backgroundColor: categoryTotals.map(c => c.color),
+                            borderColor: 'var(--secondary-bg-color)', borderWidth: 2
+                        }]
+                    }, options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { family: "'Kantumruy Pro', sans-serif" } } } } }
+                });
+            }
+
+            function renderExpenseHistory() {
+                mainContent.querySelector('#history-placeholder')?.remove();
+                mainContent.querySelectorAll('.date-header, .content-card.expense-list-container').forEach(el => el.remove());
+                
+                if (state.expenses.length === 0) {
+                    mainContent.insertAdjacentElement('beforeend', historyPlaceholder);
+                    return;
+                }
+
+                const grouped = state.expenses.reduce((acc, expense) => {
+                    const date = expense.date.slice(0, 10);
+                    if (!acc[date]) acc[date] = []; acc[date].push(expense); return acc;
+                }, {});
+
+                const sortedDates = Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a));
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+                const yesterdayStr = yesterday.toISOString().slice(0, 10);
+
+                sortedDates.forEach(dateStr => {
+                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString('km-KH', { day: 'numeric', month: 'long', year: 'numeric' });
+                    
+                    const dateHeader = document.createElement('h2');
+                    dateHeader.className = 'date-header text-lg'; dateHeader.textContent = label;
+                    mainContent.appendChild(dateHeader);
+
+                    const listContainer = document.createElement('div');
+                    listContainer.className = 'content-card expense-list-container';
+                    
+                    grouped[dateStr].sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(expense => {
+                        const category = state.categories.find(c => c.id === expense.category);
+                        const item = document.createElement('div');
+                        item.className = 'list-item'; item.dataset.id = expense.id;
+                        item.innerHTML = `
+                            <div class="text-2xl mr-4">${category?.icon || '💸'}</div>
+                            <div class="flex-grow">
+                                <p class="font-semibold">${category?.name || 'ប្រភេទ​ដែល​បាន​លុប'}</p>
+                                ${expense.notes ? `<p class="text-sm" style="color: var(--hint-color);">${expense.notes}</p>` : ''}
+                            </div>
+                            <div class="font-semibold text-right">${formatCurrency(expense.amount)}</div>`;
+                        listContainer.appendChild(item);
+                    });
+                    mainContent.appendChild(listContainer);
+                });
+            }
+            
+            function renderCategoriesInDropdown() {
+                categorySelect.innerHTML = '<option value="" disabled>-- ជ្រើសរើសប្រភេទ --</option>';
+                state.categories.forEach(cat => {
+                    categorySelect.innerHTML += `<option value="${cat.id}">${cat.icon} ${cat.name}</option>`;
+                });
+            }
+            
+            // --- Modals ---
+            function openModal(expense = null) {
+                if (expense) {
+                    modalTitle.textContent = 'កែសម្រួលចំណាយ';
+                    amountInput.value = expense.amount;
+                    categorySelect.value = expense.category;
+                    notesInput.value = expense.notes;
+                    dateInput.value = expense.date.slice(0, 10);
+                    expenseIdInput.value = expense.id;
+                    tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
+                } else {
+                    modalTitle.textContent = 'បន្ថែមចំណាយថ្មី';
+                    expenseForm.reset();
+                    renderCategoriesInDropdown();
+                    dateInput.value = new Date().toISOString().slice(0, 10);
+                    expenseIdInput.value = '';
+                    tg.MainButton.setText('រក្សាទុកចំណាយ');
+                }
+                modalOverlay.classList.remove('hidden');
+                modalContent.classList.add('open');
+                tg.MainButton.show();
+                tg.HapticFeedback.impactOccurred('light');
+            }
+
+            function closeModal() {
+                modalOverlay.classList.add('hidden');
+                modalContent.classList.remove('open');
+                tg.MainButton.hide();
+            }
+
+            // --- Data Handling ---
+            function handleFormSubmit() {
+                const amount = parseFloat(amountInput.value);
+                if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
+                    tg.showAlert('សូមបំពេញគ្រប់ช่องទាំងអស់។'); return;
+                }
+                tg.MainButton.showProgress();
+                const id = expenseIdInput.value;
+                const date = new Date(dateInput.value).toISOString();
+                if (id) {
+                    const index = state.expenses.findIndex(e => e.id === id);
+                    if (index > -1) state.expenses[index] = { ...state.expenses[index], amount, category: categorySelect.value, notes: notesInput.value.trim(), date };
+                } else {
+                    state.expenses.push({ id: self.crypto.randomUUID(), amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
+                }
+                saveDataToCloud(() => { render(); closeModal(); tg.MainButton.hideProgress(); tg.HapticFeedback.notificationOccurred('success'); });
+            }
+            
+            function deleteExpense(id) {
+                tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
+                    if (confirmed) {
+                        state.expenses = state.expenses.filter(e => e.id !== id);
+                        saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
+                    }
+                });
+            }
+
+            function saveDataToCloud(callback) {
+                if (!isStorageSupported) {
+                    if (callback) callback();
+                    return;
+                }
+                const dataToSave = JSON.stringify(state.expenses);
+                tg.CloudStorage.setItem('expenses', dataToSave, (error) => {
+                    if (error) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទុកទិន្នន័យ: ${error}`);
+                    if (callback) callback();
+                });
+            }
+
+            function loadInitialData() {
+                const user = tg.initDataUnsafe?.user;
+                if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
+
+                if (!isStorageSupported) {
+                    tg.showAlert('Telegram កំណែរបស់អ្នកចាស់ពេក។ ទិន្នន័យនឹងមិនត្រូវបានរក្សាទុកទេ។ សូមធ្វើបច្ចុប្បន្នភាព។');
+                    render(); // Render with default empty state
+                    return;
+                }
+
+                tg.CloudStorage.getItems(['expenses', 'termsAccepted'], (error, values) => {
+                    if (error) { 
+                        tg.showAlert(`Error loading data: ${error}`); 
+                        render();
+                        return; 
+                    }
+
+                    if (!values.termsAccepted) {
+                        tg.showConfirm(
+                            "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទុកទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាពនៅក្នុង Telegram Cloud Storage។ តើអ្នកយល់ព្រមទេ?",
+                            (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => loadExpenses(values.expenses)) : tg.close()
+                        );
+                    } else { 
+                        loadExpenses(values.expenses); 
+                    }
+                });
+            }
+            
+            function loadExpenses(storedValue) {
+                 if (storedValue) { try { const p = JSON.parse(storedValue); state.expenses = Array.isArray(p) ? p : []; } catch (e) { state.expenses = []; } }
+                 render();
+            }
+
+            // --- Event Listeners & Final Setup ---
+            tg.expand();
+            applyTheme();
+            tg.onEvent('themeChanged', applyTheme);
+            tg.onEvent('mainButtonClicked', handleFormSubmit);
+
+            fab.addEventListener('click', () => openModal());
+            modalOverlay.addEventListener('click', closeModal);
+
+            mainContent.addEventListener('click', (e) => {
+                const item = e.target.closest('.list-item');
+                if (item) {
+                    const expense = state.expenses.find(ex => ex.id === item.dataset.id);
+                    if (expense) {
+                        tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`,
+                            buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ]
+                        }, (buttonId) => {
+                            if (buttonId === 'edit') { openModal(expense); }
+                            else if (buttonId === 'delete') { deleteExpense(id); }
+                        });
+                    }
+                }
+            });
+
+            loadInitialData();
+        }
+
+        // --- Robust App Starter ---
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!window.Telegram || !window.Telegram.WebApp) {
+                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះនៅក្នុង Telegram។</div>`; return;
+            }
+            try { window.Telegram.WebApp.ready(); initializeApp(); }
+            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហា: ${e.message}</div>`; }
+        });
+    </script>
+</body>
+</html>
+
