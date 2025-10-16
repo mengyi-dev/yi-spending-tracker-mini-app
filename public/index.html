@@ -512,13 +512,41 @@
                     report += `${cat.icon} ${cat.name}៖ ${formatCurrency(cat.total)} (${percentage}%)\n`;
                 });
 
-                tg.showConfirm('តើអ្នកចង់ផ្ញើរបាយការណ៍នេះទៅកាន់ Bot ឬទេ?', (confirmed) => {
-                    if (confirmed) {
-                        tg.sendData(JSON.stringify({
-                            action: 'generate_report',
-                            report: report
-                        }));
-                        tg.HapticFeedback.notificationOccurred('success');
+                // Show the report in the Mini App first
+                tg.showPopup({
+                    title: 'របាយការណ៍ចំណាយ',
+                    message: report,
+                    buttons: [
+                        {id: 'send', type: 'default', text: 'ផ្ញើទៅ Chat'},
+                        {type: 'cancel', text: 'បិទ'}
+                    ]
+                }, (buttonId) => {
+                    if (buttonId === 'send') {
+                        // Send report to backend API
+                        const initData = tg.initData;
+                        fetch('/api/send-report', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                initData: initData,
+                                report: report
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
+                                tg.HapticFeedback.notificationOccurred('success');
+                            } else {
+                                tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
+                        });
                     }
                 });
             });
@@ -537,5 +565,5 @@
     </script>
 </body>
 </html>
-``` 
+`
 
