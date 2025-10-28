@@ -152,10 +152,17 @@
         <header class="header">
             <div class="flex justify-between items-center mb-4">
                 <p id="welcome-message" class="text-lg font-semibold">សូមស្វាគមន៍!</p>
-                <button id="generate-report" class="px-3 py-1.5 rounded-lg text-sm flex items-center gap-2" style="background-color: var(--button-color); color: var(--button-text-color);">
-                    <span>របាយការណ៍</span>
-                    <span>📊</span>
-                </button>
+                <div class="flex items-center gap-2">
+                    <label for="currency-select" class="text-sm mr-2" style="color: var(--hint-color);">រូបិយប័ណ្ណ</label>
+                    <select id="currency-select" class="px-2 py-1 rounded-lg text-sm" style="background-color: var(--secondary-bg-color); border: 1px solid var(--bg-color);">
+                        <option value="KHR">៛ (KHR)</option>
+                        <option value="USD">$ (USD)</option>
+                    </select>
+                    <button id="generate-report" class="px-3 py-1.5 rounded-lg text-sm flex items-center gap-2" style="background-color: var(--button-color); color: var(--button-text-color);">
+                        <span>របាយការណ៍</span>
+                        <span>📊</span>
+                    </button>
+                </div>
             </div>
             <div class="grid grid-cols-3 gap-2 text-center">
                 <div>
@@ -184,7 +191,7 @@
             </div>
         </main>
 
-        <div id="fab" class="fab">
+        <div id="fab" class="fab" title="បន្ថែមចំណាយ">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
     </div>
@@ -235,7 +242,7 @@
     <script>
         function initializeApp() {
             const tg = window.Telegram.WebApp;
-            const isStorageSupported = tg.isVersionAtLeast('6.9');
+            const isStorageSupported = tg.isVersionAtLeast && tg.isVersionAtLeast('6.9');
 
             const state = {
                 expenses: [],
@@ -248,6 +255,7 @@
                     { id: 'other', name: 'ផ្សេងៗ', icon: '💸', color: '#C9CBCF' },
                 ],
                 chartInstance: null,
+                currency: 'KHR', // default currency (display)
             };
             
             // UI Elements
@@ -260,6 +268,7 @@
             const chartCanvas = document.getElementById('expense-chart').getContext('2d');
             const fab = document.getElementById('fab');
             const generateReportBtn = document.getElementById('generate-report');
+            const currencySelect = document.getElementById('currency-select');
 
             // Modal Elements
             const modalOverlay = document.getElementById('modal-overlay');
@@ -281,28 +290,45 @@
 
             // --- UI Rendering ---
             function applyTheme() {
-                const themeParams = tg.themeParams;
-                const styles = {
-                    '--bg-color': themeParams.secondary_bg_color || '#f2f2f7',
-                    '--text-color': themeParams.text_color || '#000000',
-                    '--hint-color': themeParams.hint_color || '#999999',
-                    '--button-color': themeParams.button_color || '#007aff',
-                    '--button-text-color': themeParams.button_text_color || '#ffffff',
-                    '--secondary-bg-color': themeParams.bg_color || '#ffffff',
-                };
-                for (const [key, value] of Object.entries(styles)) {
-                    document.documentElement.style.setProperty(key, value);
+                try {
+                    const themeParams = tg.themeParams || {};
+                    const styles = {
+                        '--bg-color': themeParams.secondary_bg_color || '#f2f2f7',
+                        '--text-color': themeParams.text_color || '#000000',
+                        '--hint-color': themeParams.hint_color || '#999999',
+                        '--button-color': themeParams.button_color || '#007aff',
+                        '--button-text-color': themeParams.button_text_color || '#ffffff',
+                        '--secondary-bg-color': themeParams.bg_color || '#ffffff',
+                    };
+                    for (const [key, value] of Object.entries(styles)) {
+                        document.documentElement.style.setProperty(key, value);
+                    }
+                    if (tg.setHeaderColor) tg.setHeaderColor(themeParams.bg_color || '#ffffff');
+                } catch (e) {
+                    // ignore theme errors in non-TG env
                 }
-                tg.setHeaderColor(themeParams.bg_color || '#ffffff');
             }
             
-            const formatCurrency = (amount) => new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
+            function formatCurrency(amount) {
+                if (state.currency === 'USD') {
+                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
+                } else {
+                    // default KHR display, no fractional digits
+                    return new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
+                }
+            }
+
+            function getCurrencySymbol() {
+                return state.currency === 'USD' ? '$' : '៛';
+            }
 
             function render() {
                 renderSummaries();
                 renderExpenseHistory();
                 renderCategoriesInDropdown();
                 renderChart();
+                // Update amount placeholder showing currency
+                amountInput.placeholder = `${getCurrencySymbol()}0`;
             }
 
             function renderSummaries() {
@@ -354,7 +380,9 @@
 
                 const grouped = state.expenses.reduce((acc, expense) => {
                     const date = expense.date.slice(0, 10);
-                    if (!acc[date]) acc[date] = []; acc[date].push(expense); return acc;
+                    if (!acc[date]) acc[date] = [];
+                    acc[date].push(expense);
+                    return acc;
                 }, {});
 
                 const sortedDates = Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a));
@@ -363,7 +391,7 @@
                 const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
                 sortedDates.forEach(dateStr => {
-                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString('km-KH', { day: 'numeric', month: 'long', year: 'numeric' });
+                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString('km-KH', { day: 'numeric', month: 'short', year: 'numeric' });
                     
                     const dateHeader = document.createElement('h2');
                     dateHeader.className = 'date-header text-lg'; dateHeader.textContent = label;
@@ -405,31 +433,31 @@
                     notesInput.value = expense.notes;
                     dateInput.value = expense.date.slice(0, 10);
                     expenseIdInput.value = expense.id;
-                    tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
+                    if (tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
                 } else {
                     modalTitle.textContent = 'បន្ថែមចំណាយថ្មី';
                     expenseForm.reset();
                     renderCategoriesInDropdown();
                     dateInput.value = new Date().toISOString().slice(0, 10);
                     expenseIdInput.value = '';
-                    tg.MainButton.setText('រក្សាទុកចំណាយ');
+                    if (tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('រក្សាទុកចំណាយ');
                 }
                 modalOverlay.classList.remove('hidden');
                 modalContent.classList.add('open');
-                tg.MainButton.show();
-                tg.HapticFeedback.impactOccurred('light');
+                if (tg.MainButton && tg.MainButton.show) tg.MainButton.show();
+                if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
             }
 
             function closeModal() {
                 modalOverlay.classList.add('hidden');
                 modalContent.classList.remove('open');
-                tg.MainButton.hide();
+                if (tg.MainButton && tg.MainButton.hide) tg.MainButton.hide();
             }
 
             function openReportModal() {
                 reportModalOverlay.classList.remove('hidden');
                 reportModalContent.classList.add('open');
-                tg.HapticFeedback.impactOccurred('light');
+                if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
             }
 
             function closeReportModalFunc() {
@@ -497,7 +525,7 @@
 
             function generateDetailedReport() {
                 if (state.expenses.length === 0) {
-                    tg.showAlert('មិនមានទិន្នន័យសម្រាប់បង្កើតរបាយការណ៍ទេ។');
+                    if (tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់បង្កើតរបាយការណ៍ទេ។');
                     return;
                 }
 
@@ -510,7 +538,7 @@
                 });
 
                 if (filteredExpenses.length === 0) {
-                    tg.showAlert('មិនមានទិន្នន័យសម្រាប់រយៈពេលនេះទេ។');
+                    if (tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់រយៈពេលនេះទេ។');
                     closeReportModalFunc();
                     return;
                 }
@@ -548,7 +576,7 @@
                 report += `📋 ចំណាយតាមប្រភេទ៖\n`;
                 report += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
                 categoryTotals.sort((a, b) => b.total - a.total).forEach(cat => {
-                    const percentage = ((cat.total / totalAmount) * 100).toFixed(1);
+                    const percentage = totalAmount ? ((cat.total / totalAmount) * 100).toFixed(1) : '0.0';
                     report += `${cat.icon} ${cat.name}\n`;
                     report += `   ចំនួនទឹកប្រាក់៖ ${formatCurrency(cat.total)} (${percentage}%)\n`;
                     report += `   ចំនួនដង៖ ${cat.count}\n\n`;
@@ -566,120 +594,216 @@
                 closeReportModalFunc();
 
                 // Show the report in the Mini App first
-                tg.showPopup({
-                    title: 'របាយការណ៍ចំណាយ',
-                    message: report.substring(0, 200) + '...\n\nចុច "ផ្ញើទៅ Chat" ដើម្បីមើលរបាយការណ៍ពេញលេញ',
-                    buttons: [
-                        {id: 'send', type: 'default', text: 'ផ្ញើទៅ Chat'},
-                        {type: 'cancel', text: 'បិទ'}
-                    ]
-                }, (buttonId) => {
-                    if (buttonId === 'send') {
-                        const initData = tg.initData;
-                        fetch('/api/send-report', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                initData: initData,
-                                report: report
+                if (tg.showPopup) {
+                    tg.showPopup({
+                        title: 'របាយការណ៍ចំណាយ',
+                        message: report.substring(0, 200) + '...\n\nចុច "ផ្ញើទៅ Chat" ដើម្បីមើលរបាយការណ៍ពេញលេញ',
+                        buttons: [
+                            {id: 'send', type: 'default', text: 'ផ្ញើទៅ Chat'},
+                            {type: 'cancel', text: 'បិទ'}
+                        ]
+                    }, (buttonId) => {
+                        if (buttonId === 'send') {
+                            const initData = tg.initData;
+                            fetch('/api/send-report', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    initData: initData,
+                                    report: report
+                                })
                             })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
-                                tg.HapticFeedback.notificationOccurred('success');
-                            } else {
-                                tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
-                        });
-                    }
-                });
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.success) {
+                                    if (tg.showAlert) tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
+                                    if (tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success');
+                                } else {
+                                    if (tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error:', error);
+                                if (tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
+                            });
+                        }
+                    });
+                } else {
+                    // Non-TG fallback: show in an alert
+                    alert(report);
+                }
             }
 
             // --- Data Handling ---
             function handleFormSubmit() {
                 const amount = parseFloat(amountInput.value);
                 if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
-                    tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។'); return;
+                    if (tg.showAlert) tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។');
+                    return;
                 }
-                tg.MainButton.showProgress();
+                if (tg.MainButton && tg.MainButton.showProgress) tg.MainButton.showProgress();
                 const id = expenseIdInput.value;
                 const date = new Date(dateInput.value).toISOString();
                 if (id) {
                     const index = state.expenses.findIndex(e => e.id === id);
                     if (index > -1) state.expenses[index] = { ...state.expenses[index], amount, category: categorySelect.value, notes: notesInput.value.trim(), date };
                 } else {
-                    state.expenses.push({ id: self.crypto.randomUUID(), amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
+                    // store numeric amount as-is; switching currency is for display only (no conversion)
+                    try {
+                        const newId = (self && self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2);
+                        state.expenses.push({ id: newId, amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
+                    } catch (e) {
+                        const newId = String(Date.now()) + Math.random().toString(36).slice(2);
+                        state.expenses.push({ id: newId, amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
+                    }
                 }
-                saveDataToCloud(() => { render(); closeModal(); tg.MainButton.hideProgress(); tg.HapticFeedback.notificationOccurred('success'); });
+                saveDataToCloud(() => { render(); closeModal(); if (tg.MainButton && tg.MainButton.hideProgress) tg.MainButton.hideProgress(); if (tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
             }
             
             function deleteExpense(id) {
-                tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
-                    if (confirmed) {
+                if (tg.showConfirm) {
+                    tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
+                        if (confirmed) {
+                            state.expenses = state.expenses.filter(e => e.id !== id);
+                            saveDataToCloud(() => { render(); if (tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
+                        }
+                    });
+                } else {
+                    if (confirm('Delete this expense?')) {
                         state.expenses = state.expenses.filter(e => e.id !== id);
-                        saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
+                        saveDataToCloud(() => { render(); });
                     }
-                });
+                }
             }
 
             function saveDataToCloud(callback) {
+                // Save expenses and also the currency preference (separate small key)
                 if (!isStorageSupported) {
+                    // fallback: try localStorage
+                    try {
+                        localStorage.setItem('expenses', JSON.stringify(state.expenses));
+                        localStorage.setItem('currency', state.currency);
+                    } catch (e) {
+                        console.warn('localStorage not available', e);
+                    }
                     if (callback) callback();
                     return;
                 }
                 const dataToSave = JSON.stringify(state.expenses);
+                // Save expenses under single key (keep original behavior). If you run into DATA_TO_LONG you can switch to chunking.
                 tg.CloudStorage.setItem('expenses', dataToSave, (error) => {
-                    if (error) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទុកទិន្នន័យ: ${error}`);
+                    if (error) {
+                        // If DATA_TO_LONG, notify user and fallback to splitting could be implemented
+                        console.error('CloudStorage setItem error (expenses):', error);
+                        if (tg.showAlert) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទុកទិន្នន័យ: ${error}`);
+                    } else {
+                        // Save currency preference too
+                        tg.CloudStorage.setItem('currency', state.currency, (err2) => {
+                            if (err2) console.error('CloudStorage setItem error (currency):', err2);
+                            if (callback) callback();
+                        });
+                        return;
+                    }
                     if (callback) callback();
                 });
             }
 
             function loadInitialData() {
-                const user = tg.initDataUnsafe?.user;
+                const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
                 if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
 
                 if (!isStorageSupported) {
-                    tg.showAlert('Telegram កំណែរបស់អ្នកចាស់ពេក។ ទិន្នន័យនឹងមិនត្រូវបានរក្សាទុកទេ។ សូមធ្វើបច្ចុប្បន្នភាព។');
+                    // try to load from localStorage as fallback
+                    try {
+                        const localExpenses = localStorage.getItem('expenses');
+                        const localCurrency = localStorage.getItem('currency');
+                        if (localCurrency) state.currency = localCurrency;
+                        if (localExpenses) {
+                            const parsed = JSON.parse(localExpenses);
+                            state.expenses = Array.isArray(parsed) ? parsed : [];
+                        }
+                    } catch (e) {
+                        state.expenses = [];
+                    }
+                    currencySelect.value = state.currency;
                     render();
                     return;
                 }
 
-                tg.CloudStorage.getItems(['expenses', 'termsAccepted'], (error, values) => {
+                // Load expenses, termsAccepted and currency (if present)
+                tg.CloudStorage.getItems(['expenses', 'termsAccepted', 'currency'], (error, values) => {
                     if (error) { 
-                        tg.showAlert(`Error loading data: ${error}`); 
+                        if (tg.showAlert) tg.showAlert(`Error loading data: ${error}`); 
                         render();
                         return; 
                     }
 
+                    const proceedToLoadExpenses = (storedExpensesValue) => {
+                        // Prefer storedExpensesValue if present (backwards compatible single-key)
+                        if (storedExpensesValue) {
+                            try {
+                                const p = JSON.parse(storedExpensesValue);
+                                state.expenses = Array.isArray(p) ? p : [];
+                            } catch (e) {
+                                state.expenses = [];
+                            }
+                            // currency
+                            if (values && values.currency) state.currency = values.currency;
+                            currencySelect.value = state.currency;
+                            render();
+                            return;
+                        }
+
+                        // If no single-key expenses found, maybe there is nothing (or chunking if implemented)
+                        // For now, set empty and load currency if present
+                        state.expenses = [];
+                        if (values && values.currency) state.currency = values.currency;
+                        currencySelect.value = state.currency;
+                        render();
+                    };
+
                     if (!values.termsAccepted) {
-                        tg.showConfirm(
-                            "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទុកទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាពនៅក្នុង Telegram Cloud Storage។ តើអ្នកយល់ព្រមទេ?",
-                            (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => loadExpenses(values.expenses)) : tg.close()
-                        );
+                        if (tg.showConfirm) {
+                            tg.showConfirm(
+                                "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាព។ តើអ្នកយល់ព្រមឲ្យកម្មវិធីរក្សាទិន្នន័យក្នុង Telegram CloudStorage ឬទេ?",
+                                (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => proceedToLoadExpenses(values.expenses)) : tg.close()
+                            );
+                        } else {
+                            // If no tg.showConfirm available, just proceed
+                            tg.CloudStorage.setItem('termsAccepted', 'true', () => proceedToLoadExpenses(values.expenses));
+                        }
                     } else { 
-                        loadExpenses(values.expenses); 
+                        proceedToLoadExpenses(values.expenses); 
                     }
                 });
             }
-            
-            function loadExpenses(storedValue) {
-                 if (storedValue) { try { const p = JSON.parse(storedValue); state.expenses = Array.isArray(p) ? p : []; } catch (e) { state.expenses = []; } }
-                 render();
-            }
 
             // --- Event Listeners & Final Setup ---
-            tg.expand();
-            applyTheme();
-            tg.onEvent('themeChanged', applyTheme);
-            tg.onEvent('mainButtonClicked', handleFormSubmit);
+            try {
+                if (tg && tg.expand) tg.expand();
+                applyTheme();
+                if (tg && tg.onEvent) tg.onEvent('themeChanged', applyTheme);
+                if (tg && tg.onEvent) tg.onEvent('mainButtonClicked', handleFormSubmit);
+            } catch (e) {
+                console.warn('Telegram WebApp methods not available in this environment', e);
+            }
+
+            // Currency select change: save preference and re-render
+            currencySelect.addEventListener('change', (e) => {
+                state.currency = e.target.value;
+                // Save currency preference
+                if (!isStorageSupported) {
+                    try { localStorage.setItem('currency', state.currency); } catch (err) {}
+                    render();
+                    return;
+                }
+                tg.CloudStorage.setItem('currency', state.currency, (err) => {
+                    if (err) console.error('Error saving currency preference', err);
+                    render();
+                });
+            });
 
             fab.addEventListener('click', () => openModal());
             modalOverlay.addEventListener('click', closeModal);
@@ -690,19 +814,33 @@
                 if (item) {
                     const expense = state.expenses.find(ex => ex.id === item.dataset.id);
                     if (expense) {
-                        tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`,
-                            buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ]
-                        }, (buttonId) => {
-                            if (buttonId === 'edit') { openModal(expense); }
-                            else if (buttonId === 'delete') { deleteExpense(expense.id); }
-                        });
+                        if (tg.showPopup) {
+                            tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`, buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ] }, (buttonId) => {
+                                if (buttonId === 'edit') { openModal(expense); }
+                                else if (buttonId === 'delete') { deleteExpense(expense.id); }
+                            });
+                        } else {
+                            // fallback context menu
+                            const action = prompt('Type "edit" to edit or "delete" to delete this expense.');
+                            if (action === 'edit') openModal(expense);
+                            else if (action === 'delete') deleteExpense(expense.id);
+                        }
                     }
                 }
             });
 
             generateReportBtn.addEventListener('click', openReportModal);
-            generateReportConfirm.addEventListener('click', generateDetailedReport);
+            generateReportConfirm.addEventListener('click', (e) => { e.preventDefault(); generateDetailedReport(); });
             closeReportModal.addEventListener('click', closeReportModalFunc);
+
+            // Load saved currency immediately from localStorage before cloud result to avoid flicker
+            try {
+                const lsCurrency = localStorage.getItem('currency');
+                if (lsCurrency) {
+                    state.currency = lsCurrency;
+                    currencySelect.value = state.currency;
+                }
+            } catch (e) {}
 
             loadInitialData();
         }
@@ -710,12 +848,12 @@
         // --- Robust App Starter ---
         document.addEventListener('DOMContentLoaded', () => {
             if (!window.Telegram || !window.Telegram.WebApp) {
-                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះនៅក្នុង Telegram។</div>`; return;
+                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះក្នុង Telegram កម្មវិធីបឋម (Telegram Web App) ដើម្បីប្រើមុខងារត្រឹមត្រូវ។</div>`;
+                return;
             }
             try { window.Telegram.WebApp.ready(); initializeApp(); }
-            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហា: ${e.message}</div>`; }
+            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសូលសម្រាប់ព័ត៌មានបន្ថែម។</div>`; }
         });
     </script>
 </body>
 </html>
-
