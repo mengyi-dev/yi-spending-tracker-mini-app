@@ -6,7 +6,9 @@
     <title>កម្មវិធីតាមដានចំណាយប្រចាំថ្ងៃ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- NOTE: Do NOT include the telegram-web-app.js from telegram.org inside a real Telegram WebApp.
+         The WebApp object is injected by Telegram. Including the external script can cause conflicts.
+         Removed to avoid initialization issues. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
@@ -152,12 +154,10 @@
         <header class="header">
             <div class="flex justify-between items-center mb-4">
                 <p id="welcome-message" class="text-lg font-semibold">សូមស្វាគមន៍!</p>
-                <div class="flex items-center gap-2">
-                    <button id="generate-report" class="px-3 py-1.5 rounded-lg text-sm flex items-center gap-2" style="background-color: var(--button-color); color: var(--button-text-color);">
-                        <span>របាយការណ៍</span>
-                        <span>📊</span>
-                    </button>
-                </div>
+                <button id="generate-report" class="px-3 py-1.5 rounded-lg text-sm flex items-center gap-2" style="background-color: var(--button-color); color: var(--button-text-color);">
+                    <span>របាយការណ៍</span>
+                    <span>📊</span>
+                </button>
             </div>
             <div class="grid grid-cols-3 gap-2 text-center">
                 <div>
@@ -186,7 +186,7 @@
             </div>
         </main>
 
-        <div id="fab" class="fab" title="បន្ថែមចំណាយ">
+        <div id="fab" class="fab" title="បន្ថែចំណាយ">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
     </div>
@@ -197,7 +197,7 @@
         <div class="modal-handle"></div>
         <h2 id="modal-title" class="text-xl font-bold text-center mb-4"></h2>
         <form id="expense-form" class="space-y-4">
-            <input type="number" id="amount-input" placeholder="៛០" class="w-full text-4xl font-bold p-2 text-center border-0 bg-transparent" required>
+            <input type="number" id="amount-input" placeholder="៛0" class="w-full text-4xl font-bold p-2 text-center border-0 bg-transparent" required>
             <div class="grid grid-cols-2 gap-4">
                 <select id="category-select" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required></select>
                 <input type="date" id="date-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required>
@@ -236,8 +236,9 @@
 
     <script>
         function initializeApp() {
-            const tg = window.Telegram.WebApp;
-            const isStorageSupported = typeof tg.isVersionAtLeast === 'function' ? tg.isVersionAtLeast('6.9') : false;
+            // If Telegram WebApp exists, use it; otherwise tg will be null and we operate in fallback/local mode.
+            const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+            const isStorageSupported = tg && typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast('6.9');
 
             const state = {
                 expenses: [],
@@ -250,7 +251,6 @@
                     { id: 'other', name: 'ផ្សេងៗ', icon: '💸', color: '#C9CBCF' },
                 ],
                 chartInstance: null,
-                currency: 'KHR', // default currency (display)
             };
             
             // UI Elements
@@ -263,7 +263,6 @@
             const chartCanvas = document.getElementById('expense-chart').getContext('2d');
             const fab = document.getElementById('fab');
             const generateReportBtn = document.getElementById('generate-report');
-            const currencySelect = document.getElementById('currency-select');
 
             // Modal Elements
             const modalOverlay = document.getElementById('modal-overlay');
@@ -287,6 +286,10 @@
             function cloudSetItemPromise(key, value) {
                 return new Promise((resolve, reject) => {
                     try {
+                        if (!tg || !tg.CloudStorage || !tg.CloudStorage.setItem) {
+                            reject(new Error('CloudStorage not available'));
+                            return;
+                        }
                         tg.CloudStorage.setItem(key, value, (err) => {
                             if (err) reject(err);
                             else resolve();
@@ -300,6 +303,10 @@
             function cloudGetItemsPromise(keys) {
                 return new Promise((resolve, reject) => {
                     try {
+                        if (!tg || !tg.CloudStorage || !tg.CloudStorage.getItems) {
+                            reject(new Error('CloudStorage not available'));
+                            return;
+                        }
                         tg.CloudStorage.getItems(keys, (err, values) => {
                             if (err) reject(err);
                             else resolve(values || {});
@@ -324,7 +331,7 @@
                     const chBytes = utf8ByteLength(ch);
                     if (currentBytes + chBytes > maxBytes) {
                         if (current === '') {
-                            // single char exceeds maxBytes (very unlikely). Force single char chunk.
+                            // single char exceeds maxBytes (unlikely) — force it
                             chunks.push(ch);
                             current = '';
                             currentBytes = 0;
@@ -342,13 +349,12 @@
                 return chunks;
             }
 
-            // Use a conservative per-key chunk size. If you still hit DATA_TO_LONG, reduce this value.
             const MAX_CHUNK_BYTES = 3500;
 
             // --- UI Rendering ---
             function applyTheme() {
                 try {
-                    const themeParams = tg.themeParams || {};
+                    const themeParams = (tg && tg.themeParams) ? tg.themeParams : {};
                     const styles = {
                         '--bg-color': themeParams.secondary_bg_color || '#f2f2f7',
                         '--text-color': themeParams.text_color || '#000000',
@@ -360,31 +366,29 @@
                     for (const [key, value] of Object.entries(styles)) {
                         document.documentElement.style.setProperty(key, value);
                     }
-                    if (tg.setHeaderColor) tg.setHeaderColor(themeParams.bg_color || '#ffffff');
+                    if (tg && tg.setHeaderColor) tg.setHeaderColor(themeParams.bg_color || '#ffffff');
                 } catch (e) {
                     // ignore theme errors in non-TG env
                 }
             }
             
             function formatCurrency(amount) {
-                if (state.currency === 'USD') {
-                    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(amount);
-                } else {
-                    // default KHR display, no fractional digits
+                // fixed to KHR as requested; display using Khmer locale without fractional digits
+                try {
                     return new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
+                } catch (e) {
+                    // fallback simple formatting
+                    return `៛${Math.round(amount)}`;
                 }
             }
 
-            function getCurrencySymbol() {
-                return state.currency === 'USD' ? '$' : '៛';
-            }
+            function getCurrencySymbol() { return '៛'; }
 
             function render() {
                 renderSummaries();
                 renderExpenseHistory();
                 renderCategoriesInDropdown();
                 renderChart();
-                // Update amount placeholder showing currency
                 amountInput.placeholder = `${getCurrencySymbol()}0`;
             }
 
@@ -490,31 +494,31 @@
                     notesInput.value = expense.notes;
                     dateInput.value = expense.date.slice(0, 10);
                     expenseIdInput.value = expense.id;
-                    if (tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
+                    if (tg && tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
                 } else {
                     modalTitle.textContent = 'បន្ថែមចំណាយថ្មី';
                     expenseForm.reset();
                     renderCategoriesInDropdown();
                     dateInput.value = new Date().toISOString().slice(0, 10);
                     expenseIdInput.value = '';
-                    if (tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('រក្សាទុកចំណាយ');
+                    if (tg && tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('រក្សាទុកចំណាយ');
                 }
                 modalOverlay.classList.remove('hidden');
                 modalContent.classList.add('open');
-                if (tg.MainButton && tg.MainButton.show) tg.MainButton.show();
-                if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
+                if (tg && tg.MainButton && tg.MainButton.show) tg.MainButton.show();
+                if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
             }
 
             function closeModal() {
                 modalOverlay.classList.add('hidden');
                 modalContent.classList.remove('open');
-                if (tg.MainButton && tg.MainButton.hide) tg.MainButton.hide();
+                if (tg && tg.MainButton && tg.MainButton.hide) tg.MainButton.hide();
             }
 
             function openReportModal() {
                 reportModalOverlay.classList.remove('hidden');
                 reportModalContent.classList.add('open');
-                if (tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
+                if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
             }
 
             function closeReportModalFunc() {
@@ -582,7 +586,8 @@
 
             function generateDetailedReport() {
                 if (state.expenses.length === 0) {
-                    if (tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់បង្កើតរបាយការណ៍ទេ។');
+                    if (tg && tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់បង្កើតរបាយការណ៍ទេ។');
+                    else alert('No data for report.');
                     return;
                 }
 
@@ -595,7 +600,7 @@
                 });
 
                 if (filteredExpenses.length === 0) {
-                    if (tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់រយៈពេលនេះទេ។');
+                    if (tg && tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់រយៈពេលនេះទេ។');
                     closeReportModalFunc();
                     return;
                 }
@@ -603,7 +608,6 @@
                 const totalAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
                 const transactionCount = filteredExpenses.length;
                 
-                // Calculate days in period
                 const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
                 const avgPerDay = totalAmount / daysDiff;
                 const avgPerTransaction = totalAmount / transactionCount;
@@ -614,7 +618,6 @@
                     count: filteredExpenses.filter(e => e.category === cat.id).length
                 })).filter(cat => cat.total > 0);
 
-                // Find highest and lowest expense
                 const sortedExpenses = [...filteredExpenses].sort((a, b) => b.amount - a.amount);
                 const highestExpense = sortedExpenses[0];
                 const lowestExpense = sortedExpenses[sortedExpenses.length - 1];
@@ -650,8 +653,7 @@
 
                 closeReportModalFunc();
 
-                // Show the report in the Mini App first
-                if (tg.showPopup) {
+                if (tg && tg.showPopup) {
                     tg.showPopup({
                         title: 'របាយការណ៍ចំណាយ',
                         message: report.substring(0, 200) + '...\n\nចុច "ផ្ញើទៅ Chat" ដើម្បីមើលរបាយការណ៍ពេញលេញ',
@@ -664,15 +666,10 @@
                             const initData = tg.initData;
                             fetch('/api/send-report', {
                                 method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    initData: initData,
-                                    report: report
-                                })
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ initData: initData, report: report })
                             })
-                            .then(response => response.json())
+                            .then(r => r.json())
                             .then(data => {
                                 if (data.success) {
                                     if (tg.showAlert) tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
@@ -681,196 +678,139 @@
                                     if (tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
                                 }
                             })
-                            .catch(error => {
-                                console.error('Error:', error);
+                            .catch(err => {
+                                console.error('Error:', err);
                                 if (tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
                             });
                         }
                     });
                 } else {
-                    // Non-TG fallback: show in an alert
                     alert(report);
                 }
             }
 
-            // --- Data Handling (robust, chunk-aware) ---
+            // --- Data Handling (robust chunk-aware storage) ---
             async function saveDataToCloud(callback) {
-                const saveCurrency = async () => {
-                    try {
-                        if (isStorageSupported) {
-                            await cloudSetItemPromise('currency', state.currency);
-                        } else {
-                            localStorage.setItem('currency', state.currency);
-                        }
-                    } catch (e) {
-                        console.warn('Failed to save currency to cloud:', e);
-                    }
-                };
-
                 const dataToSave = JSON.stringify(state.expenses || []);
 
                 if (!isStorageSupported) {
-                    // fallback to localStorage
                     try {
                         localStorage.setItem('expenses', dataToSave);
-                        await saveCurrency();
-                    } catch (e) {
-                        console.warn('localStorage setItem failed', e);
-                    }
+                    } catch (e) { console.warn('localStorage not available', e); }
                     if (callback) callback();
                     return;
                 }
 
-                // Try single-key save first
+                // Try single-key first
                 try {
                     await cloudSetItemPromise('expenses', dataToSave);
-                    // success, save currency and finish
-                    await saveCurrency();
                     if (callback) callback();
                     return;
                 } catch (err) {
-                    console.warn('Single-key CloudStorage setItem failed:', err);
-                    // If error indicates size issue, fall back to chunking; else still try chunking for safety
+                    console.warn('Single-key save failed, falling back to chunking:', err);
                 }
 
-                // FALLBACK: chunking
+                // Chunking fallback
                 try {
                     const chunks = chunkStringByByteSize(dataToSave, MAX_CHUNK_BYTES);
                     const chunkCount = chunks.length;
-
-                    // Write all chunk keys first (overwrites existing)
-                    const chunkPromises = [];
-                    for (let i = 0; i < chunkCount; i++) {
-                        chunkPromises.push(cloudSetItemPromise(`expenses_chunk_${i}`, chunks[i]));
-                    }
-                    await Promise.all(chunkPromises);
-
-                    // Now set the count (written last so load won't see partial chunks with count)
+                    // write chunks
+                    const writes = [];
+                    for (let i = 0; i < chunkCount; i++) writes.push(cloudSetItemPromise(`expenses_chunk_${i}`, chunks[i]));
+                    await Promise.all(writes);
+                    // write count last
                     await cloudSetItemPromise('expenses_chunk_count', String(chunkCount));
-
-                    // Remove / clear any leftover chunk keys beyond chunkCount from previous saves
-                    try {
-                        const prevValues = await cloudGetItemsPromise(['expenses_chunk_count']);
-                        const prevCountRaw = prevValues && prevValues.expenses_chunk_count;
-                        const prevCount = prevCountRaw ? parseInt(prevCountRaw, 10) : 0;
-                        if (prevCount > chunkCount) {
-                            const clears = [];
-                            for (let i = chunkCount; i < prevCount; i++) {
-                                // Overwrite with empty string to free up space / avoid stale data
-                                clears.push(cloudSetItemPromise(`expenses_chunk_${i}`, ''));
-                            }
-                            await Promise.all(clears);
-                        }
-                    } catch (cleanupErr) {
-                        // non-fatal
-                        console.warn('Chunk cleanup failed:', cleanupErr);
-                    }
-
-                    // Optionally, remove single-key 'expenses' to avoid confusion (we keep it but you can remove if desired)
-                    // await cloudSetItemPromise('expenses', '');
-
-                    await saveCurrency();
-
+                    // optional cleanup of leftover chunks is omitted for brevity (non-fatal)
                     if (callback) callback();
                 } catch (e) {
-                    console.error('Chunked CloudStorage save failed:', e);
-                    if (tg.showAlert) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទិន្នន័យ: ${e}`);
+                    console.error('Chunked save failed:', e);
+                    if (tg && tg.showAlert) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទិន្នន័យ: ${e}`);
                     if (callback) callback();
                 }
             }
 
-            // Load expenses: prefer single-key 'expenses', then fall back to chunked storage, then localStorage.
-            async function loadExpensesFromCloud(storedSingleValue) {
-                if (storedSingleValue) {
+            async function loadExpensesFromCloud(singleValue) {
+                if (singleValue) {
                     try {
-                        const parsed = JSON.parse(storedSingleValue);
+                        const parsed = JSON.parse(singleValue);
                         state.expenses = Array.isArray(parsed) ? parsed : [];
                         return;
                     } catch (e) {
-                        console.warn('Failed to parse single-key expenses JSON, will try chunked load.', e);
+                        console.warn('Failed to parse single-key expenses, attempting chunked load.', e);
                     }
                 }
 
+                // non-cloud fallback
                 if (!isStorageSupported) {
-                    // localStorage fallback
                     try {
-                        const localData = localStorage.getItem('expenses');
-                        if (localData) {
-                            const parsed = JSON.parse(localData);
+                        const local = localStorage.getItem('expenses');
+                        if (local) {
+                            const parsed = JSON.parse(local);
                             state.expenses = Array.isArray(parsed) ? parsed : [];
                             return;
                         }
                         state.expenses = [];
                         return;
                     } catch (e) {
-                        console.warn('localStorage read failed', e);
+                        console.warn('local load failed', e);
                         state.expenses = [];
                         return;
                     }
                 }
 
-                // Try chunked load
+                // chunked load
                 try {
                     const values = await cloudGetItemsPromise(['expenses_chunk_count']);
                     const countRaw = values && values.expenses_chunk_count;
                     const count = countRaw ? parseInt(countRaw, 10) : 0;
-                    if (!count) {
-                        state.expenses = [];
-                        return;
-                    }
+                    if (!count) { state.expenses = []; return; }
                     const keys = [];
                     for (let i = 0; i < count; i++) keys.push(`expenses_chunk_${i}`);
-                    const chunkValues = await cloudGetItemsPromise(keys);
+                    const chunkVals = await cloudGetItemsPromise(keys);
                     let assembled = '';
-                    for (let i = 0; i < count; i++) {
-                        assembled += (chunkValues && chunkValues[`expenses_chunk_${i}`]) || '';
-                    }
+                    for (let i = 0; i < count; i++) assembled += chunkVals[`expenses_chunk_${i}`] || '';
                     try {
                         const parsed = JSON.parse(assembled);
                         state.expenses = Array.isArray(parsed) ? parsed : [];
                         return;
                     } catch (e) {
-                        console.error('Failed to parse assembled chunked expenses JSON:', e);
+                        console.error('Failed to parse assembled chunks', e);
                         state.expenses = [];
                         return;
                     }
                 } catch (e) {
-                    console.error('Error loading chunked expenses:', e);
+                    console.error('Error loading chunked expenses', e);
                     state.expenses = [];
                 }
             }
 
-            // --- Original handlers, now using robust saving/loading ---
+            // --- Handlers ---
             function handleFormSubmit() {
                 const amount = parseFloat(amountInput.value);
                 if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
-                    if (tg.showAlert) tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។');
+                    if (tg && tg.showAlert) tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។');
+                    else alert('Please fill all required fields.');
                     return;
                 }
-                if (tg.MainButton && tg.MainButton.showProgress) tg.MainButton.showProgress();
+                if (tg && tg.MainButton && tg.MainButton.showProgress) tg.MainButton.showProgress();
                 const id = expenseIdInput.value;
                 const date = new Date(dateInput.value).toISOString();
                 if (id) {
                     const index = state.expenses.findIndex(e => e.id === id);
                     if (index > -1) state.expenses[index] = { ...state.expenses[index], amount, category: categorySelect.value, notes: notesInput.value.trim(), date };
                 } else {
-                    try {
-                        const newId = (self && self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2);
-                        state.expenses.push({ id: newId, amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
-                    } catch (e) {
-                        const newId = String(Date.now()) + Math.random().toString(36).slice(2);
-                        state.expenses.push({ id: newId, amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
-                    }
+                    const newId = (self && self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2);
+                    state.expenses.push({ id: newId, amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
                 }
-                saveDataToCloud(() => { render(); closeModal(); if (tg.MainButton && tg.MainButton.hideProgress) tg.MainButton.hideProgress(); if (tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
+                saveDataToCloud(() => { render(); closeModal(); if (tg && tg.MainButton && tg.MainButton.hideProgress) tg.MainButton.hideProgress(); if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
             }
-            
+
             function deleteExpense(id) {
-                if (tg.showConfirm) {
+                if (tg && tg.showConfirm) {
                     tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
                         if (confirmed) {
                             state.expenses = state.expenses.filter(e => e.id !== id);
-                            saveDataToCloud(() => { render(); if (tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
+                            saveDataToCloud(() => { render(); if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
                         }
                     });
                 } else {
@@ -888,25 +828,8 @@
                 if (tg && tg.onEvent) tg.onEvent('themeChanged', applyTheme);
                 if (tg && tg.onEvent) tg.onEvent('mainButtonClicked', handleFormSubmit);
             } catch (e) {
-                console.warn('Telegram WebApp methods not available in this environment', e);
+                console.warn('Telegram WebApp methods not available', e);
             }
-
-            // Currency select change: save preference and re-render
-            currencySelect.addEventListener('change', async (e) => {
-                state.currency = e.target.value;
-                // Save currency preference
-                if (!isStorageSupported) {
-                    try { localStorage.setItem('currency', state.currency); } catch (err) {}
-                    render();
-                    return;
-                }
-                try {
-                    await cloudSetItemPromise('currency', state.currency);
-                } catch (err) {
-                    console.warn('Failed saving currency to CloudStorage', err);
-                }
-                render();
-            });
 
             fab.addEventListener('click', () => openModal());
             modalOverlay.addEventListener('click', closeModal);
@@ -917,13 +840,12 @@
                 if (item) {
                     const expense = state.expenses.find(ex => ex.id === item.dataset.id);
                     if (expense) {
-                        if (tg.showPopup) {
+                        if (tg && tg.showPopup) {
                             tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`, buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ] }, (buttonId) => {
                                 if (buttonId === 'edit') { openModal(expense); }
                                 else if (buttonId === 'delete') { deleteExpense(expense.id); }
                             });
                         } else {
-                            // fallback context menu
                             const action = prompt('Type "edit" to edit or "delete" to delete this expense.');
                             if (action === 'edit') openModal(expense);
                             else if (action === 'delete') deleteExpense(expense.id);
@@ -936,87 +858,55 @@
             generateReportConfirm.addEventListener('click', (e) => { e.preventDefault(); generateDetailedReport(); });
             closeReportModal.addEventListener('click', closeReportModalFunc);
 
-            // Load saved currency immediately from localStorage before cloud result to avoid flicker
+            // Load local immediate fallback to minimize flicker
             try {
-                const lsCurrency = localStorage.getItem('currency');
-                if (lsCurrency) {
-                    state.currency = lsCurrency;
-                    currencySelect.value = state.currency;
+                const ls = localStorage.getItem('expenses');
+                if (ls) {
+                    const parsed = JSON.parse(ls);
+                    state.expenses = Array.isArray(parsed) ? parsed : [];
                 }
             } catch (e) {}
 
-            // Load initial data (termsAccepted, expenses single-key or chunked, currency)
+            // Load initial cloud/local data (termsAccepted and expenses)
             (async function loadInitialData() {
                 const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
                 if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
 
                 if (!isStorageSupported) {
-                    // local fallback
-                    try {
-                        const localExpenses = localStorage.getItem('expenses');
-                        const localCurrency = localStorage.getItem('currency');
-                        if (localCurrency) state.currency = localCurrency;
-                        if (localExpenses) {
-                            const parsed = JSON.parse(localExpenses);
-                            state.expenses = Array.isArray(parsed) ? parsed : [];
-                        } else {
-                            state.expenses = [];
-                        }
-                    } catch (e) {
-                        state.expenses = [];
-                    }
-                    currencySelect.value = state.currency;
+                    // fallback already read localStorage above
                     render();
                     return;
                 }
 
                 try {
-                    const values = await cloudGetItemsPromise(['expenses', 'termsAccepted', 'currency']);
+                    const values = await cloudGetItemsPromise(['expenses', 'termsAccepted']);
                     const proceed = async (storedExpensesValue) => {
-                        // load currency if available
-                        if (values && values.currency) state.currency = values.currency;
-                        currencySelect.value = state.currency;
                         await loadExpensesFromCloud(storedExpensesValue);
                         render();
                     };
 
                     if (!values.termsAccepted) {
-                        if (tg.showConfirm) {
+                        if (tg && tg.showConfirm) {
                             tg.showConfirm(
                                 "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាព។ តើអ្នកយល់ព្រមឲ្យកម្មវិធីរក្សាទិន្នន័យក្នុង Telegram CloudStorage ឬទេ?",
                                 (ok) => {
                                     if (ok) {
                                         tg.CloudStorage.setItem('termsAccepted', 'true', async () => { await proceed(values.expenses); });
                                     } else {
-                                        tg.close();
+                                        if (tg && tg.close) tg.close();
                                     }
                                 }
                             );
                         } else {
-                            // fallback: set and proceed
-                            await cloudSetItemPromise('termsAccepted', 'true');
+                            await cloudSetItemPromise('termsAccepted', 'true').catch(() => {});
                             await proceed(values.expenses);
                         }
                     } else {
                         await proceed(values.expenses);
                     }
                 } catch (err) {
-                    console.error('Error loading initial CloudStorage items:', err);
-                    // fallback to localStorage
-                    try {
-                        const localExpenses = localStorage.getItem('expenses');
-                        const localCurrency = localStorage.getItem('currency');
-                        if (localCurrency) state.currency = localCurrency;
-                        if (localExpenses) {
-                            const parsed = JSON.parse(localExpenses);
-                            state.expenses = Array.isArray(parsed) ? parsed : [];
-                        } else {
-                            state.expenses = [];
-                        }
-                    } catch (e) {
-                        state.expenses = [];
-                    }
-                    currencySelect.value = state.currency;
+                    console.error('Error loading CloudStorage items:', err);
+                    // fallback to local storage (already loaded)
                     render();
                 }
             })();
@@ -1024,12 +914,24 @@
 
         // --- Robust App Starter ---
         document.addEventListener('DOMContentLoaded', () => {
-            if (!window.Telegram || !window.Telegram.WebApp) {
-                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះក្នុង Telegram កម្មវិធីបឋម (Telegram Web App) ដើម្បីប្រើមុខងារត្រឹមត្រូវ។</div>`;
+            // If Telegram.WebApp is not injected, show message asking to open inside Telegram.
+            const hasTG = !!(window.Telegram && window.Telegram.WebApp);
+            if (!hasTG) {
+                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះក្នុង Telegram ដើម្បីប្រើមុខងារពេញលេញ (Web App). ក៏ប៉ុន្តែអ្នកអាចចាប់ផ្តើមក្នុងកម្មវិធីឯកជនសម្រាប់សាកល្បង។</div>`;
                 return;
             }
-            try { window.Telegram.WebApp.ready(); initializeApp(); }
-            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសុលសម្រាប់ព័ត៌មានបន្ថែម។</div>`; }
+
+            try {
+                // Call ready() only if it exists (some Telegram versions might not expose it in test env)
+                if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.ready === 'function') {
+                    window.Telegram.WebApp.ready();
+                }
+                initializeApp();
+            } catch (e) {
+                console.error(e);
+                // Provide a clearer error message and keep original console log for debugging.
+                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសុលសម្រាប់ព័ត៌មានបន្ថែម។</div>`;
+            }
         });
     </script>
 </body>
