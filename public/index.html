@@ -6,7 +6,6 @@
     <title>កម្មវិធីតាមដានចំណាយប្រចាំថ្ងៃ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Do NOT include external telegram-web-app.js; Telegram injects the WebApp object. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
@@ -202,6 +201,10 @@
             </div>
             <input type="text" id="notes-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" placeholder="កំណត់ចំណាំ (បើមាន)">
             <input type="hidden" id="expense-id-input">
+            <!-- Fallback submit button (visible when Telegram MainButton is not available) -->
+            <button type="submit" id="fallback-save-btn" class="w-full p-3 rounded-lg font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">
+                រក្សាទុកចំណាយ
+            </button>
         </form>
     </div>
 
@@ -234,7 +237,6 @@
 
     <script>
         function initializeApp() {
-            // Use injected Telegram WebApp if present; otherwise tg=null and we operate in fallback/local mode.
             const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
             const isStorageSupported = tg && typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast('6.9');
 
@@ -272,6 +274,7 @@
             const dateInput = document.getElementById('date-input');
             const notesInput = document.getElementById('notes-input');
             const expenseIdInput = document.getElementById('expense-id-input');
+            const fallbackSaveBtn = document.getElementById('fallback-save-btn');
 
             // Report Modal Elements
             const reportModalOverlay = document.getElementById('report-modal-overlay');
@@ -315,7 +318,6 @@
                 });
             }
 
-            // Byte-aware length and chunking to avoid splitting UTF-8 characters
             function utf8ByteLength(str) {
                 return new TextEncoder().encode(str).length;
             }
@@ -364,9 +366,7 @@
                         document.documentElement.style.setProperty(key, value);
                     }
                     if (tg && tg.setHeaderColor) tg.setHeaderColor(themeParams.bg_color || '#ffffff');
-                } catch (e) {
-                    // ignore
-                }
+                } catch (e) {}
             }
             
             function formatCurrency(amount) {
@@ -489,6 +489,7 @@
                     notesInput.value = expense.notes;
                     dateInput.value = expense.date.slice(0, 10);
                     expenseIdInput.value = expense.id;
+                    fallbackSaveBtn.textContent = 'ធ្វើបច្ចុប្បន្នភាព';
                     if (tg && tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
                 } else {
                     modalTitle.textContent = 'បន្ថែមចំណាយថ្មី';
@@ -496,11 +497,20 @@
                     renderCategoriesInDropdown();
                     dateInput.value = new Date().toISOString().slice(0, 10);
                     expenseIdInput.value = '';
+                    fallbackSaveBtn.textContent = 'រក្សាទុកចំណាយ';
                     if (tg && tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('រក្សាទុកចំណាយ');
                 }
                 modalOverlay.classList.remove('hidden');
                 modalContent.classList.add('open');
-                if (tg && tg.MainButton && tg.MainButton.show) tg.MainButton.show();
+                // Show Telegram MainButton if available
+                if (tg && tg.MainButton && tg.MainButton.show) {
+                    tg.MainButton.show();
+                    // hide fallback button when MainButton is available
+                    fallbackSaveBtn.style.display = 'none';
+                } else {
+                    // show fallback button
+                    fallbackSaveBtn.style.display = 'block';
+                }
                 if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
             }
 
@@ -684,7 +694,7 @@
                 }
             }
 
-            // --- Data Handling (robust chunk-aware) ---
+            // --- Data Handling (FIXED: properly prioritize single-key backwards compat) ---
             async function saveDataToCloud(callback) {
                 const dataToSave = JSON.stringify(state.expenses || []);
 
@@ -720,38 +730,49 @@
             }
 
             async function loadExpensesFromCloud(singleValue) {
+                // PRIORITY 1: Single-key 'expenses' (backwards compat with your old data)
                 if (singleValue) {
                     try {
                         const parsed = JSON.parse(singleValue);
-                        state.expenses = Array.isArray(parsed) ? parsed : [];
-                        return;
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            state.expenses = parsed;
+                            console.log('Loaded expenses from single-key storage:', parsed.length, 'items');
+                            return;
+                        }
                     } catch (e) {
-                        console.warn('Failed to parse single-key expenses, attempting chunked load.', e);
+                        console.warn('Failed to parse single-key expenses:', e);
                     }
                 }
 
+                // PRIORITY 2: localStorage fallback (if CloudStorage not supported)
                 if (!isStorageSupported) {
                     try {
                         const local = localStorage.getItem('expenses');
                         if (local) {
                             const parsed = JSON.parse(local);
-                            state.expenses = Array.isArray(parsed) ? parsed : [];
-                            return;
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                state.expenses = parsed;
+                                console.log('Loaded expenses from localStorage:', parsed.length, 'items');
+                                return;
+                            }
                         }
-                        state.expenses = [];
-                        return;
                     } catch (e) {
-                        console.warn('local load failed', e);
-                        state.expenses = [];
-                        return;
+                        console.warn('localStorage load failed', e);
                     }
+                    state.expenses = [];
+                    return;
                 }
 
+                // PRIORITY 3: chunked load (only if single-key was empty/absent)
                 try {
                     const values = await cloudGetItemsPromise(['expenses_chunk_count']);
                     const countRaw = values && values.expenses_chunk_count;
                     const count = countRaw ? parseInt(countRaw, 10) : 0;
-                    if (!count) { state.expenses = []; return; }
+                    if (!count) {
+                        console.log('No chunked data found, starting with empty expenses.');
+                        state.expenses = [];
+                        return;
+                    }
                     const keys = [];
                     for (let i = 0; i < count; i++) keys.push(`expenses_chunk_${i}`);
                     const chunkVals = await cloudGetItemsPromise(keys);
@@ -759,13 +780,15 @@
                     for (let i = 0; i < count; i++) assembled += chunkVals[`expenses_chunk_${i}`] || '';
                     try {
                         const parsed = JSON.parse(assembled);
-                        state.expenses = Array.isArray(parsed) ? parsed : [];
-                        return;
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            state.expenses = parsed;
+                            console.log('Loaded expenses from chunked storage:', parsed.length, 'items');
+                            return;
+                        }
                     } catch (e) {
                         console.error('Failed to parse assembled chunks', e);
-                        state.expenses = [];
-                        return;
                     }
+                    state.expenses = [];
                 } catch (e) {
                     console.error('Error loading chunked expenses', e);
                     state.expenses = [];
@@ -773,7 +796,8 @@
             }
 
             // --- Handlers ---
-            function handleFormSubmit() {
+            function handleFormSubmit(e) {
+                if (e) e.preventDefault();
                 const amount = parseFloat(amountInput.value);
                 if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
                     if (tg && tg.showAlert) tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។');
@@ -823,6 +847,9 @@
             modalOverlay.addEventListener('click', closeModal);
             reportModalOverlay.addEventListener('click', closeReportModalFunc);
 
+            // Form submit handler (for fallback button and also for MainButton)
+            expenseForm.addEventListener('submit', handleFormSubmit);
+
             mainContent.addEventListener('click', (e) => {
                 const item = e.target.closest('.list-item');
                 if (item) {
@@ -846,12 +873,15 @@
             generateReportConfirm.addEventListener('click', (e) => { e.preventDefault(); generateDetailedReport(); });
             closeReportModal.addEventListener('click', closeReportModalFunc);
 
-            // load cached local immediately (reduce flicker)
+            // Load cached local immediately to minimize flicker
             try {
                 const ls = localStorage.getItem('expenses');
                 if (ls) {
                     const parsed = JSON.parse(ls);
-                    state.expenses = Array.isArray(parsed) ? parsed : [];
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        state.expenses = parsed;
+                        console.log('Pre-loaded from localStorage:', parsed.length, 'items');
+                    }
                 }
             } catch (e) {}
 
@@ -861,6 +891,7 @@
                 if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
 
                 if (!isStorageSupported) {
+                    // already pre-loaded from localStorage above
                     render();
                     return;
                 }
@@ -893,23 +924,21 @@
                     }
                 } catch (err) {
                     console.error('Error loading CloudStorage items:', err);
+                    // fallback to whatever was pre-loaded from localStorage
                     render();
                 }
             })();
         }
 
-        // --- App start (no blocking replacement if Telegram is absent) ---
+        // --- App start ---
         document.addEventListener('DOMContentLoaded', () => {
             try {
                 if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.ready === 'function') {
-                    // call ready if available (safe)
                     window.Telegram.WebApp.ready();
                 }
-                // Initialize the app regardless; initializeApp is defensive and will work without Telegram
                 initializeApp();
             } catch (e) {
                 console.error('App startup error:', e);
-                // Only show the startup failure message on real exceptions
                 document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសុលសម្រាប់ព័ត៌មានបន្ថែម។</div>`;
             }
         });
