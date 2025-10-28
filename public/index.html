@@ -153,11 +153,6 @@
             <div class="flex justify-between items-center mb-4">
                 <p id="welcome-message" class="text-lg font-semibold">សូមស្វាគមន៍!</p>
                 <div class="flex items-center gap-2">
-                    <label for="currency-select" class="text-sm mr-2" style="color: var(--hint-color);">រូបិយប័ណ្ណ</label>
-                    <select id="currency-select" class="px-2 py-1 rounded-lg text-sm" style="background-color: var(--secondary-bg-color); border: 1px solid var(--bg-color);">
-                        <option value="KHR">៛ (KHR)</option>
-                        <option value="USD">$ (USD)</option>
-                    </select>
                     <button id="generate-report" class="px-3 py-1.5 rounded-lg text-sm flex items-center gap-2" style="background-color: var(--button-color); color: var(--button-text-color);">
                         <span>របាយការណ៍</span>
                         <span>📊</span>
@@ -242,7 +237,7 @@
     <script>
         function initializeApp() {
             const tg = window.Telegram.WebApp;
-            const isStorageSupported = tg.isVersionAtLeast && tg.isVersionAtLeast('6.9');
+            const isStorageSupported = typeof tg.isVersionAtLeast === 'function' ? tg.isVersionAtLeast('6.9') : false;
 
             const state = {
                 expenses: [],
@@ -287,6 +282,68 @@
             const reportPeriodSelect = document.getElementById('report-period-select');
             const generateReportConfirm = document.getElementById('generate-report-confirm');
             const closeReportModal = document.getElementById('close-report-modal');
+
+            // --- Helper utilities for CloudStorage ---
+            function cloudSetItemPromise(key, value) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        tg.CloudStorage.setItem(key, value, (err) => {
+                            if (err) reject(err);
+                            else resolve();
+                        });
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }
+
+            function cloudGetItemsPromise(keys) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        tg.CloudStorage.getItems(keys, (err, values) => {
+                            if (err) reject(err);
+                            else resolve(values || {});
+                        });
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }
+
+            // Byte-aware length and chunking to avoid splitting UTF-8 characters
+            function utf8ByteLength(str) {
+                return new TextEncoder().encode(str).length;
+            }
+
+            function chunkStringByByteSize(str, maxBytes) {
+                const chunks = [];
+                let current = '';
+                let currentBytes = 0;
+                for (let i = 0; i < str.length; i++) {
+                    const ch = str[i];
+                    const chBytes = utf8ByteLength(ch);
+                    if (currentBytes + chBytes > maxBytes) {
+                        if (current === '') {
+                            // single char exceeds maxBytes (very unlikely). Force single char chunk.
+                            chunks.push(ch);
+                            current = '';
+                            currentBytes = 0;
+                        } else {
+                            chunks.push(current);
+                            current = ch;
+                            currentBytes = chBytes;
+                        }
+                    } else {
+                        current += ch;
+                        currentBytes += chBytes;
+                    }
+                }
+                if (current.length > 0) chunks.push(current);
+                return chunks;
+            }
+
+            // Use a conservative per-key chunk size. If you still hit DATA_TO_LONG, reduce this value.
+            const MAX_CHUNK_BYTES = 3500;
 
             // --- UI Rendering ---
             function applyTheme() {
@@ -636,7 +693,154 @@
                 }
             }
 
-            // --- Data Handling ---
+            // --- Data Handling (robust, chunk-aware) ---
+            async function saveDataToCloud(callback) {
+                const saveCurrency = async () => {
+                    try {
+                        if (isStorageSupported) {
+                            await cloudSetItemPromise('currency', state.currency);
+                        } else {
+                            localStorage.setItem('currency', state.currency);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to save currency to cloud:', e);
+                    }
+                };
+
+                const dataToSave = JSON.stringify(state.expenses || []);
+
+                if (!isStorageSupported) {
+                    // fallback to localStorage
+                    try {
+                        localStorage.setItem('expenses', dataToSave);
+                        await saveCurrency();
+                    } catch (e) {
+                        console.warn('localStorage setItem failed', e);
+                    }
+                    if (callback) callback();
+                    return;
+                }
+
+                // Try single-key save first
+                try {
+                    await cloudSetItemPromise('expenses', dataToSave);
+                    // success, save currency and finish
+                    await saveCurrency();
+                    if (callback) callback();
+                    return;
+                } catch (err) {
+                    console.warn('Single-key CloudStorage setItem failed:', err);
+                    // If error indicates size issue, fall back to chunking; else still try chunking for safety
+                }
+
+                // FALLBACK: chunking
+                try {
+                    const chunks = chunkStringByByteSize(dataToSave, MAX_CHUNK_BYTES);
+                    const chunkCount = chunks.length;
+
+                    // Write all chunk keys first (overwrites existing)
+                    const chunkPromises = [];
+                    for (let i = 0; i < chunkCount; i++) {
+                        chunkPromises.push(cloudSetItemPromise(`expenses_chunk_${i}`, chunks[i]));
+                    }
+                    await Promise.all(chunkPromises);
+
+                    // Now set the count (written last so load won't see partial chunks with count)
+                    await cloudSetItemPromise('expenses_chunk_count', String(chunkCount));
+
+                    // Remove / clear any leftover chunk keys beyond chunkCount from previous saves
+                    try {
+                        const prevValues = await cloudGetItemsPromise(['expenses_chunk_count']);
+                        const prevCountRaw = prevValues && prevValues.expenses_chunk_count;
+                        const prevCount = prevCountRaw ? parseInt(prevCountRaw, 10) : 0;
+                        if (prevCount > chunkCount) {
+                            const clears = [];
+                            for (let i = chunkCount; i < prevCount; i++) {
+                                // Overwrite with empty string to free up space / avoid stale data
+                                clears.push(cloudSetItemPromise(`expenses_chunk_${i}`, ''));
+                            }
+                            await Promise.all(clears);
+                        }
+                    } catch (cleanupErr) {
+                        // non-fatal
+                        console.warn('Chunk cleanup failed:', cleanupErr);
+                    }
+
+                    // Optionally, remove single-key 'expenses' to avoid confusion (we keep it but you can remove if desired)
+                    // await cloudSetItemPromise('expenses', '');
+
+                    await saveCurrency();
+
+                    if (callback) callback();
+                } catch (e) {
+                    console.error('Chunked CloudStorage save failed:', e);
+                    if (tg.showAlert) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទិន្នន័យ: ${e}`);
+                    if (callback) callback();
+                }
+            }
+
+            // Load expenses: prefer single-key 'expenses', then fall back to chunked storage, then localStorage.
+            async function loadExpensesFromCloud(storedSingleValue) {
+                if (storedSingleValue) {
+                    try {
+                        const parsed = JSON.parse(storedSingleValue);
+                        state.expenses = Array.isArray(parsed) ? parsed : [];
+                        return;
+                    } catch (e) {
+                        console.warn('Failed to parse single-key expenses JSON, will try chunked load.', e);
+                    }
+                }
+
+                if (!isStorageSupported) {
+                    // localStorage fallback
+                    try {
+                        const localData = localStorage.getItem('expenses');
+                        if (localData) {
+                            const parsed = JSON.parse(localData);
+                            state.expenses = Array.isArray(parsed) ? parsed : [];
+                            return;
+                        }
+                        state.expenses = [];
+                        return;
+                    } catch (e) {
+                        console.warn('localStorage read failed', e);
+                        state.expenses = [];
+                        return;
+                    }
+                }
+
+                // Try chunked load
+                try {
+                    const values = await cloudGetItemsPromise(['expenses_chunk_count']);
+                    const countRaw = values && values.expenses_chunk_count;
+                    const count = countRaw ? parseInt(countRaw, 10) : 0;
+                    if (!count) {
+                        state.expenses = [];
+                        return;
+                    }
+                    const keys = [];
+                    for (let i = 0; i < count; i++) keys.push(`expenses_chunk_${i}`);
+                    const chunkValues = await cloudGetItemsPromise(keys);
+                    let assembled = '';
+                    for (let i = 0; i < count; i++) {
+                        assembled += (chunkValues && chunkValues[`expenses_chunk_${i}`]) || '';
+                    }
+                    try {
+                        const parsed = JSON.parse(assembled);
+                        state.expenses = Array.isArray(parsed) ? parsed : [];
+                        return;
+                    } catch (e) {
+                        console.error('Failed to parse assembled chunked expenses JSON:', e);
+                        state.expenses = [];
+                        return;
+                    }
+                } catch (e) {
+                    console.error('Error loading chunked expenses:', e);
+                    state.expenses = [];
+                }
+            }
+
+            // --- Original handlers, now using robust saving/loading ---
             function handleFormSubmit() {
                 const amount = parseFloat(amountInput.value);
                 if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
@@ -650,7 +854,6 @@
                     const index = state.expenses.findIndex(e => e.id === id);
                     if (index > -1) state.expenses[index] = { ...state.expenses[index], amount, category: categorySelect.value, notes: notesInput.value.trim(), date };
                 } else {
-                    // store numeric amount as-is; switching currency is for display only (no conversion)
                     try {
                         const newId = (self && self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2);
                         state.expenses.push({ id: newId, amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
@@ -678,109 +881,7 @@
                 }
             }
 
-            function saveDataToCloud(callback) {
-                // Save expenses and also the currency preference (separate small key)
-                if (!isStorageSupported) {
-                    // fallback: try localStorage
-                    try {
-                        localStorage.setItem('expenses', JSON.stringify(state.expenses));
-                        localStorage.setItem('currency', state.currency);
-                    } catch (e) {
-                        console.warn('localStorage not available', e);
-                    }
-                    if (callback) callback();
-                    return;
-                }
-                const dataToSave = JSON.stringify(state.expenses);
-                // Save expenses under single key (keep original behavior). If you run into DATA_TO_LONG you can switch to chunking.
-                tg.CloudStorage.setItem('expenses', dataToSave, (error) => {
-                    if (error) {
-                        // If DATA_TO_LONG, notify user and fallback to splitting could be implemented
-                        console.error('CloudStorage setItem error (expenses):', error);
-                        if (tg.showAlert) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទុកទិន្នន័យ: ${error}`);
-                    } else {
-                        // Save currency preference too
-                        tg.CloudStorage.setItem('currency', state.currency, (err2) => {
-                            if (err2) console.error('CloudStorage setItem error (currency):', err2);
-                            if (callback) callback();
-                        });
-                        return;
-                    }
-                    if (callback) callback();
-                });
-            }
-
-            function loadInitialData() {
-                const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-                if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
-
-                if (!isStorageSupported) {
-                    // try to load from localStorage as fallback
-                    try {
-                        const localExpenses = localStorage.getItem('expenses');
-                        const localCurrency = localStorage.getItem('currency');
-                        if (localCurrency) state.currency = localCurrency;
-                        if (localExpenses) {
-                            const parsed = JSON.parse(localExpenses);
-                            state.expenses = Array.isArray(parsed) ? parsed : [];
-                        }
-                    } catch (e) {
-                        state.expenses = [];
-                    }
-                    currencySelect.value = state.currency;
-                    render();
-                    return;
-                }
-
-                // Load expenses, termsAccepted and currency (if present)
-                tg.CloudStorage.getItems(['expenses', 'termsAccepted', 'currency'], (error, values) => {
-                    if (error) { 
-                        if (tg.showAlert) tg.showAlert(`Error loading data: ${error}`); 
-                        render();
-                        return; 
-                    }
-
-                    const proceedToLoadExpenses = (storedExpensesValue) => {
-                        // Prefer storedExpensesValue if present (backwards compatible single-key)
-                        if (storedExpensesValue) {
-                            try {
-                                const p = JSON.parse(storedExpensesValue);
-                                state.expenses = Array.isArray(p) ? p : [];
-                            } catch (e) {
-                                state.expenses = [];
-                            }
-                            // currency
-                            if (values && values.currency) state.currency = values.currency;
-                            currencySelect.value = state.currency;
-                            render();
-                            return;
-                        }
-
-                        // If no single-key expenses found, maybe there is nothing (or chunking if implemented)
-                        // For now, set empty and load currency if present
-                        state.expenses = [];
-                        if (values && values.currency) state.currency = values.currency;
-                        currencySelect.value = state.currency;
-                        render();
-                    };
-
-                    if (!values.termsAccepted) {
-                        if (tg.showConfirm) {
-                            tg.showConfirm(
-                                "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាព។ តើអ្នកយល់ព្រមឲ្យកម្មវិធីរក្សាទិន្នន័យក្នុង Telegram CloudStorage ឬទេ?",
-                                (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => proceedToLoadExpenses(values.expenses)) : tg.close()
-                            );
-                        } else {
-                            // If no tg.showConfirm available, just proceed
-                            tg.CloudStorage.setItem('termsAccepted', 'true', () => proceedToLoadExpenses(values.expenses));
-                        }
-                    } else { 
-                        proceedToLoadExpenses(values.expenses); 
-                    }
-                });
-            }
-
-            // --- Event Listeners & Final Setup ---
+            // --- Initialization & event wiring ---
             try {
                 if (tg && tg.expand) tg.expand();
                 applyTheme();
@@ -791,7 +892,7 @@
             }
 
             // Currency select change: save preference and re-render
-            currencySelect.addEventListener('change', (e) => {
+            currencySelect.addEventListener('change', async (e) => {
                 state.currency = e.target.value;
                 // Save currency preference
                 if (!isStorageSupported) {
@@ -799,10 +900,12 @@
                     render();
                     return;
                 }
-                tg.CloudStorage.setItem('currency', state.currency, (err) => {
-                    if (err) console.error('Error saving currency preference', err);
-                    render();
-                });
+                try {
+                    await cloudSetItemPromise('currency', state.currency);
+                } catch (err) {
+                    console.warn('Failed saving currency to CloudStorage', err);
+                }
+                render();
             });
 
             fab.addEventListener('click', () => openModal());
@@ -842,7 +945,81 @@
                 }
             } catch (e) {}
 
-            loadInitialData();
+            // Load initial data (termsAccepted, expenses single-key or chunked, currency)
+            (async function loadInitialData() {
+                const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+                if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
+
+                if (!isStorageSupported) {
+                    // local fallback
+                    try {
+                        const localExpenses = localStorage.getItem('expenses');
+                        const localCurrency = localStorage.getItem('currency');
+                        if (localCurrency) state.currency = localCurrency;
+                        if (localExpenses) {
+                            const parsed = JSON.parse(localExpenses);
+                            state.expenses = Array.isArray(parsed) ? parsed : [];
+                        } else {
+                            state.expenses = [];
+                        }
+                    } catch (e) {
+                        state.expenses = [];
+                    }
+                    currencySelect.value = state.currency;
+                    render();
+                    return;
+                }
+
+                try {
+                    const values = await cloudGetItemsPromise(['expenses', 'termsAccepted', 'currency']);
+                    const proceed = async (storedExpensesValue) => {
+                        // load currency if available
+                        if (values && values.currency) state.currency = values.currency;
+                        currencySelect.value = state.currency;
+                        await loadExpensesFromCloud(storedExpensesValue);
+                        render();
+                    };
+
+                    if (!values.termsAccepted) {
+                        if (tg.showConfirm) {
+                            tg.showConfirm(
+                                "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាព។ តើអ្នកយល់ព្រមឲ្យកម្មវិធីរក្សាទិន្នន័យក្នុង Telegram CloudStorage ឬទេ?",
+                                (ok) => {
+                                    if (ok) {
+                                        tg.CloudStorage.setItem('termsAccepted', 'true', async () => { await proceed(values.expenses); });
+                                    } else {
+                                        tg.close();
+                                    }
+                                }
+                            );
+                        } else {
+                            // fallback: set and proceed
+                            await cloudSetItemPromise('termsAccepted', 'true');
+                            await proceed(values.expenses);
+                        }
+                    } else {
+                        await proceed(values.expenses);
+                    }
+                } catch (err) {
+                    console.error('Error loading initial CloudStorage items:', err);
+                    // fallback to localStorage
+                    try {
+                        const localExpenses = localStorage.getItem('expenses');
+                        const localCurrency = localStorage.getItem('currency');
+                        if (localCurrency) state.currency = localCurrency;
+                        if (localExpenses) {
+                            const parsed = JSON.parse(localExpenses);
+                            state.expenses = Array.isArray(parsed) ? parsed : [];
+                        } else {
+                            state.expenses = [];
+                        }
+                    } catch (e) {
+                        state.expenses = [];
+                    }
+                    currencySelect.value = state.currency;
+                    render();
+                }
+            })();
         }
 
         // --- Robust App Starter ---
@@ -852,7 +1029,7 @@
                 return;
             }
             try { window.Telegram.WebApp.ready(); initializeApp(); }
-            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសូលសម្រាប់ព័ត៌មានបន្ថែម។</div>`; }
+            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសុលសម្រាប់ព័ត៌មានបន្ថែម។</div>`; }
         });
     </script>
 </body>
