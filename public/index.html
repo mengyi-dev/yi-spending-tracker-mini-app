@@ -6,9 +6,7 @@
     <title>កម្មវិធីតាមដានចំណាយប្រចាំថ្ងៃ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- NOTE: Do NOT include the telegram-web-app.js from telegram.org inside a real Telegram WebApp.
-         The WebApp object is injected by Telegram. Including the external script can cause conflicts.
-         Removed to avoid initialization issues. -->
+    <!-- Do NOT include external telegram-web-app.js; Telegram injects the WebApp object. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
@@ -186,7 +184,7 @@
             </div>
         </main>
 
-        <div id="fab" class="fab" title="បន្ថែចំណាយ">
+        <div id="fab" class="fab" title="បន្ថែមចំណាយ">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
     </div>
@@ -236,7 +234,7 @@
 
     <script>
         function initializeApp() {
-            // If Telegram WebApp exists, use it; otherwise tg will be null and we operate in fallback/local mode.
+            // Use injected Telegram WebApp if present; otherwise tg=null and we operate in fallback/local mode.
             const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
             const isStorageSupported = tg && typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast('6.9');
 
@@ -331,7 +329,6 @@
                     const chBytes = utf8ByteLength(ch);
                     if (currentBytes + chBytes > maxBytes) {
                         if (current === '') {
-                            // single char exceeds maxBytes (unlikely) — force it
                             chunks.push(ch);
                             current = '';
                             currentBytes = 0;
@@ -368,16 +365,14 @@
                     }
                     if (tg && tg.setHeaderColor) tg.setHeaderColor(themeParams.bg_color || '#ffffff');
                 } catch (e) {
-                    // ignore theme errors in non-TG env
+                    // ignore
                 }
             }
             
             function formatCurrency(amount) {
-                // fixed to KHR as requested; display using Khmer locale without fractional digits
                 try {
                     return new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
                 } catch (e) {
-                    // fallback simple formatting
                     return `៛${Math.round(amount)}`;
                 }
             }
@@ -673,14 +668,14 @@
                             .then(data => {
                                 if (data.success) {
                                     if (tg.showAlert) tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
-                                    if (tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success');
+                                    if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success');
                                 } else {
-                                    if (tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
+                                    if (tg && tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
                                 }
                             })
                             .catch(err => {
                                 console.error('Error:', err);
-                                if (tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
+                                if (tg && tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
                             });
                         }
                     });
@@ -689,14 +684,12 @@
                 }
             }
 
-            // --- Data Handling (robust chunk-aware storage) ---
+            // --- Data Handling (robust chunk-aware) ---
             async function saveDataToCloud(callback) {
                 const dataToSave = JSON.stringify(state.expenses || []);
 
                 if (!isStorageSupported) {
-                    try {
-                        localStorage.setItem('expenses', dataToSave);
-                    } catch (e) { console.warn('localStorage not available', e); }
+                    try { localStorage.setItem('expenses', dataToSave); } catch (e) { console.warn('localStorage not available', e); }
                     if (callback) callback();
                     return;
                 }
@@ -714,13 +707,10 @@
                 try {
                     const chunks = chunkStringByByteSize(dataToSave, MAX_CHUNK_BYTES);
                     const chunkCount = chunks.length;
-                    // write chunks
                     const writes = [];
                     for (let i = 0; i < chunkCount; i++) writes.push(cloudSetItemPromise(`expenses_chunk_${i}`, chunks[i]));
                     await Promise.all(writes);
-                    // write count last
                     await cloudSetItemPromise('expenses_chunk_count', String(chunkCount));
-                    // optional cleanup of leftover chunks is omitted for brevity (non-fatal)
                     if (callback) callback();
                 } catch (e) {
                     console.error('Chunked save failed:', e);
@@ -740,7 +730,6 @@
                     }
                 }
 
-                // non-cloud fallback
                 if (!isStorageSupported) {
                     try {
                         const local = localStorage.getItem('expenses');
@@ -758,7 +747,6 @@
                     }
                 }
 
-                // chunked load
                 try {
                     const values = await cloudGetItemsPromise(['expenses_chunk_count']);
                     const countRaw = values && values.expenses_chunk_count;
@@ -858,7 +846,7 @@
             generateReportConfirm.addEventListener('click', (e) => { e.preventDefault(); generateDetailedReport(); });
             closeReportModal.addEventListener('click', closeReportModalFunc);
 
-            // Load local immediate fallback to minimize flicker
+            // load cached local immediately (reduce flicker)
             try {
                 const ls = localStorage.getItem('expenses');
                 if (ls) {
@@ -873,7 +861,6 @@
                 if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
 
                 if (!isStorageSupported) {
-                    // fallback already read localStorage above
                     render();
                     return;
                 }
@@ -906,30 +893,23 @@
                     }
                 } catch (err) {
                     console.error('Error loading CloudStorage items:', err);
-                    // fallback to local storage (already loaded)
                     render();
                 }
             })();
         }
 
-        // --- Robust App Starter ---
+        // --- App start (no blocking replacement if Telegram is absent) ---
         document.addEventListener('DOMContentLoaded', () => {
-            // If Telegram.WebApp is not injected, show message asking to open inside Telegram.
-            const hasTG = !!(window.Telegram && window.Telegram.WebApp);
-            if (!hasTG) {
-                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះក្នុង Telegram ដើម្បីប្រើមុខងារពេញលេញ (Web App). ក៏ប៉ុន្តែអ្នកអាចចាប់ផ្តើមក្នុងកម្មវិធីឯកជនសម្រាប់សាកល្បង។</div>`;
-                return;
-            }
-
             try {
-                // Call ready() only if it exists (some Telegram versions might not expose it in test env)
                 if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.ready === 'function') {
+                    // call ready if available (safe)
                     window.Telegram.WebApp.ready();
                 }
+                // Initialize the app regardless; initializeApp is defensive and will work without Telegram
                 initializeApp();
             } catch (e) {
-                console.error(e);
-                // Provide a clearer error message and keep original console log for debugging.
+                console.error('App startup error:', e);
+                // Only show the startup failure message on real exceptions
                 document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសុលសម្រាប់ព័ត៌មានបន្ថែម។</div>`;
             }
         });
