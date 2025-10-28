@@ -6,6 +6,7 @@
     <title>កម្មវិធីតាមដានចំណាយប្រចាំថ្ងៃ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
@@ -183,7 +184,7 @@
             </div>
         </main>
 
-        <div id="fab" class="fab" title="បន្ថែមចំណាយ">
+        <div id="fab" class="fab">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
     </div>
@@ -194,17 +195,13 @@
         <div class="modal-handle"></div>
         <h2 id="modal-title" class="text-xl font-bold text-center mb-4"></h2>
         <form id="expense-form" class="space-y-4">
-            <input type="number" id="amount-input" placeholder="៛0" class="w-full text-4xl font-bold p-2 text-center border-0 bg-transparent" required>
+            <input type="number" id="amount-input" placeholder="៛០" class="w-full text-4xl font-bold p-2 text-center border-0 bg-transparent" required>
             <div class="grid grid-cols-2 gap-4">
                 <select id="category-select" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required></select>
                 <input type="date" id="date-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required>
             </div>
             <input type="text" id="notes-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" placeholder="កំណត់ចំណាំ (បើមាន)">
             <input type="hidden" id="expense-id-input">
-            <!-- Fallback submit button (visible when Telegram MainButton is not available) -->
-            <button type="submit" id="fallback-save-btn" class="w-full p-3 rounded-lg font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">
-                រក្សាទុកចំណាយ
-            </button>
         </form>
     </div>
 
@@ -237,8 +234,8 @@
 
     <script>
         function initializeApp() {
-            const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
-            const isStorageSupported = tg && typeof tg.isVersionAtLeast === 'function' && tg.isVersionAtLeast('6.9');
+            const tg = window.Telegram.WebApp;
+            const isStorageSupported = tg.isVersionAtLeast('6.9');
 
             const state = {
                 expenses: [],
@@ -274,7 +271,6 @@
             const dateInput = document.getElementById('date-input');
             const notesInput = document.getElementById('notes-input');
             const expenseIdInput = document.getElementById('expense-id-input');
-            const fallbackSaveBtn = document.getElementById('fallback-save-btn');
 
             // Report Modal Elements
             const reportModalOverlay = document.getElementById('report-modal-overlay');
@@ -283,108 +279,30 @@
             const generateReportConfirm = document.getElementById('generate-report-confirm');
             const closeReportModal = document.getElementById('close-report-modal');
 
-            // --- Helper utilities for CloudStorage ---
-            function cloudSetItemPromise(key, value) {
-                return new Promise((resolve, reject) => {
-                    try {
-                        if (!tg || !tg.CloudStorage || !tg.CloudStorage.setItem) {
-                            reject(new Error('CloudStorage not available'));
-                            return;
-                        }
-                        tg.CloudStorage.setItem(key, value, (err) => {
-                            if (err) reject(err);
-                            else resolve();
-                        });
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
-            }
-
-            function cloudGetItemsPromise(keys) {
-                return new Promise((resolve, reject) => {
-                    try {
-                        if (!tg || !tg.CloudStorage || !tg.CloudStorage.getItems) {
-                            reject(new Error('CloudStorage not available'));
-                            return;
-                        }
-                        tg.CloudStorage.getItems(keys, (err, values) => {
-                            if (err) reject(err);
-                            else resolve(values || {});
-                        });
-                    } catch (e) {
-                        reject(e);
-                    }
-                });
-            }
-
-            function utf8ByteLength(str) {
-                return new TextEncoder().encode(str).length;
-            }
-
-            function chunkStringByByteSize(str, maxBytes) {
-                const chunks = [];
-                let current = '';
-                let currentBytes = 0;
-                for (let i = 0; i < str.length; i++) {
-                    const ch = str[i];
-                    const chBytes = utf8ByteLength(ch);
-                    if (currentBytes + chBytes > maxBytes) {
-                        if (current === '') {
-                            chunks.push(ch);
-                            current = '';
-                            currentBytes = 0;
-                        } else {
-                            chunks.push(current);
-                            current = ch;
-                            currentBytes = chBytes;
-                        }
-                    } else {
-                        current += ch;
-                        currentBytes += chBytes;
-                    }
-                }
-                if (current.length > 0) chunks.push(current);
-                return chunks;
-            }
-
-            const MAX_CHUNK_BYTES = 3500;
-
             // --- UI Rendering ---
             function applyTheme() {
-                try {
-                    const themeParams = (tg && tg.themeParams) ? tg.themeParams : {};
-                    const styles = {
-                        '--bg-color': themeParams.secondary_bg_color || '#f2f2f7',
-                        '--text-color': themeParams.text_color || '#000000',
-                        '--hint-color': themeParams.hint_color || '#999999',
-                        '--button-color': themeParams.button_color || '#007aff',
-                        '--button-text-color': themeParams.button_text_color || '#ffffff',
-                        '--secondary-bg-color': themeParams.bg_color || '#ffffff',
-                    };
-                    for (const [key, value] of Object.entries(styles)) {
-                        document.documentElement.style.setProperty(key, value);
-                    }
-                    if (tg && tg.setHeaderColor) tg.setHeaderColor(themeParams.bg_color || '#ffffff');
-                } catch (e) {}
+                const themeParams = tg.themeParams;
+                const styles = {
+                    '--bg-color': themeParams.secondary_bg_color || '#f2f2f7',
+                    '--text-color': themeParams.text_color || '#000000',
+                    '--hint-color': themeParams.hint_color || '#999999',
+                    '--button-color': themeParams.button_color || '#007aff',
+                    '--button-text-color': themeParams.button_text_color || '#ffffff',
+                    '--secondary-bg-color': themeParams.bg_color || '#ffffff',
+                };
+                for (const [key, value] of Object.entries(styles)) {
+                    document.documentElement.style.setProperty(key, value);
+                }
+                tg.setHeaderColor(themeParams.bg_color || '#ffffff');
             }
             
-            function formatCurrency(amount) {
-                try {
-                    return new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
-                } catch (e) {
-                    return `៛${Math.round(amount)}`;
-                }
-            }
-
-            function getCurrencySymbol() { return '៛'; }
+            const formatCurrency = (amount) => new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
 
             function render() {
                 renderSummaries();
                 renderExpenseHistory();
                 renderCategoriesInDropdown();
                 renderChart();
-                amountInput.placeholder = `${getCurrencySymbol()}0`;
             }
 
             function renderSummaries() {
@@ -436,9 +354,7 @@
 
                 const grouped = state.expenses.reduce((acc, expense) => {
                     const date = expense.date.slice(0, 10);
-                    if (!acc[date]) acc[date] = [];
-                    acc[date].push(expense);
-                    return acc;
+                    if (!acc[date]) acc[date] = []; acc[date].push(expense); return acc;
                 }, {});
 
                 const sortedDates = Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a));
@@ -447,7 +363,7 @@
                 const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
                 sortedDates.forEach(dateStr => {
-                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString('km-KH', { day: 'numeric', month: 'short', year: 'numeric' });
+                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString('km-KH', { day: 'numeric', month: 'long', year: 'numeric' });
                     
                     const dateHeader = document.createElement('h2');
                     dateHeader.className = 'date-header text-lg'; dateHeader.textContent = label;
@@ -489,41 +405,31 @@
                     notesInput.value = expense.notes;
                     dateInput.value = expense.date.slice(0, 10);
                     expenseIdInput.value = expense.id;
-                    fallbackSaveBtn.textContent = 'ធ្វើបច្ចុប្បន្នភាព';
-                    if (tg && tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
+                    tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
                 } else {
                     modalTitle.textContent = 'បន្ថែមចំណាយថ្មី';
                     expenseForm.reset();
                     renderCategoriesInDropdown();
                     dateInput.value = new Date().toISOString().slice(0, 10);
                     expenseIdInput.value = '';
-                    fallbackSaveBtn.textContent = 'រក្សាទុកចំណាយ';
-                    if (tg && tg.MainButton && tg.MainButton.setText) tg.MainButton.setText('រក្សាទុកចំណាយ');
+                    tg.MainButton.setText('រក្សាទុកចំណាយ');
                 }
                 modalOverlay.classList.remove('hidden');
                 modalContent.classList.add('open');
-                // Show Telegram MainButton if available
-                if (tg && tg.MainButton && tg.MainButton.show) {
-                    tg.MainButton.show();
-                    // hide fallback button when MainButton is available
-                    fallbackSaveBtn.style.display = 'none';
-                } else {
-                    // show fallback button
-                    fallbackSaveBtn.style.display = 'block';
-                }
-                if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
+                tg.MainButton.show();
+                tg.HapticFeedback.impactOccurred('light');
             }
 
             function closeModal() {
                 modalOverlay.classList.add('hidden');
                 modalContent.classList.remove('open');
-                if (tg && tg.MainButton && tg.MainButton.hide) tg.MainButton.hide();
+                tg.MainButton.hide();
             }
 
             function openReportModal() {
                 reportModalOverlay.classList.remove('hidden');
                 reportModalContent.classList.add('open');
-                if (tg && tg.HapticFeedback && tg.HapticFeedback.impactOccurred) tg.HapticFeedback.impactOccurred('light');
+                tg.HapticFeedback.impactOccurred('light');
             }
 
             function closeReportModalFunc() {
@@ -591,8 +497,7 @@
 
             function generateDetailedReport() {
                 if (state.expenses.length === 0) {
-                    if (tg && tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់បង្កើតរបាយការណ៍ទេ។');
-                    else alert('No data for report.');
+                    tg.showAlert('មិនមានទិន្នន័យសម្រាប់បង្កើតរបាយការណ៍ទេ។');
                     return;
                 }
 
@@ -605,7 +510,7 @@
                 });
 
                 if (filteredExpenses.length === 0) {
-                    if (tg && tg.showAlert) tg.showAlert('មិនមានទិន្នន័យសម្រាប់រយៈពេលនេះទេ។');
+                    tg.showAlert('មិនមានទិន្នន័យសម្រាប់រយៈពេលនេះទេ។');
                     closeReportModalFunc();
                     return;
                 }
@@ -613,6 +518,7 @@
                 const totalAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
                 const transactionCount = filteredExpenses.length;
                 
+                // Calculate days in period
                 const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
                 const avgPerDay = totalAmount / daysDiff;
                 const avgPerTransaction = totalAmount / transactionCount;
@@ -623,6 +529,7 @@
                     count: filteredExpenses.filter(e => e.category === cat.id).length
                 })).filter(cat => cat.total > 0);
 
+                // Find highest and lowest expense
                 const sortedExpenses = [...filteredExpenses].sort((a, b) => b.amount - a.amount);
                 const highestExpense = sortedExpenses[0];
                 const lowestExpense = sortedExpenses[sortedExpenses.length - 1];
@@ -641,7 +548,7 @@
                 report += `📋 ចំណាយតាមប្រភេទ៖\n`;
                 report += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
                 categoryTotals.sort((a, b) => b.total - a.total).forEach(cat => {
-                    const percentage = totalAmount ? ((cat.total / totalAmount) * 100).toFixed(1) : '0.0';
+                    const percentage = ((cat.total / totalAmount) * 100).toFixed(1);
                     report += `${cat.icon} ${cat.name}\n`;
                     report += `   ចំនួនទឹកប្រាក់៖ ${formatCurrency(cat.total)} (${percentage}%)\n`;
                     report += `   ចំនួនដង៖ ${cat.count}\n\n`;
@@ -658,290 +565,157 @@
 
                 closeReportModalFunc();
 
-                if (tg && tg.showPopup) {
-                    tg.showPopup({
-                        title: 'របាយការណ៍ចំណាយ',
-                        message: report.substring(0, 200) + '...\n\nចុច "ផ្ញើទៅ Chat" ដើម្បីមើលរបាយការណ៍ពេញលេញ',
-                        buttons: [
-                            {id: 'send', type: 'default', text: 'ផ្ញើទៅ Chat'},
-                            {type: 'cancel', text: 'បិទ'}
-                        ]
-                    }, (buttonId) => {
-                        if (buttonId === 'send') {
-                            const initData = tg.initData;
-                            fetch('/api/send-report', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ initData: initData, report: report })
+                // Show the report in the Mini App first
+                tg.showPopup({
+                    title: 'របាយការណ៍ចំណាយ',
+                    message: report.substring(0, 200) + '...\n\nចុច "ផ្ញើទៅ Chat" ដើម្បីមើលរបាយការណ៍ពេញលេញ',
+                    buttons: [
+                        {id: 'send', type: 'default', text: 'ផ្ញើទៅ Chat'},
+                        {type: 'cancel', text: 'បិទ'}
+                    ]
+                }, (buttonId) => {
+                    if (buttonId === 'send') {
+                        const initData = tg.initData;
+                        fetch('/api/send-report', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                initData: initData,
+                                report: report
                             })
-                            .then(r => r.json())
-                            .then(data => {
-                                if (data.success) {
-                                    if (tg.showAlert) tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
-                                    if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success');
-                                } else {
-                                    if (tg && tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
-                                }
-                            })
-                            .catch(err => {
-                                console.error('Error:', err);
-                                if (tg && tg.showAlert) tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
-                            });
-                        }
-                    });
-                } else {
-                    alert(report);
-                }
-            }
-
-            // --- Data Handling (FIXED: properly prioritize single-key backwards compat) ---
-            async function saveDataToCloud(callback) {
-                const dataToSave = JSON.stringify(state.expenses || []);
-
-                if (!isStorageSupported) {
-                    try { localStorage.setItem('expenses', dataToSave); } catch (e) { console.warn('localStorage not available', e); }
-                    if (callback) callback();
-                    return;
-                }
-
-                // Try single-key first
-                try {
-                    await cloudSetItemPromise('expenses', dataToSave);
-                    if (callback) callback();
-                    return;
-                } catch (err) {
-                    console.warn('Single-key save failed, falling back to chunking:', err);
-                }
-
-                // Chunking fallback
-                try {
-                    const chunks = chunkStringByByteSize(dataToSave, MAX_CHUNK_BYTES);
-                    const chunkCount = chunks.length;
-                    const writes = [];
-                    for (let i = 0; i < chunkCount; i++) writes.push(cloudSetItemPromise(`expenses_chunk_${i}`, chunks[i]));
-                    await Promise.all(writes);
-                    await cloudSetItemPromise('expenses_chunk_count', String(chunkCount));
-                    if (callback) callback();
-                } catch (e) {
-                    console.error('Chunked save failed:', e);
-                    if (tg && tg.showAlert) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទិន្នន័យ: ${e}`);
-                    if (callback) callback();
-                }
-            }
-
-            async function loadExpensesFromCloud(singleValue) {
-                // PRIORITY 1: Single-key 'expenses' (backwards compat with your old data)
-                if (singleValue) {
-                    try {
-                        const parsed = JSON.parse(singleValue);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            state.expenses = parsed;
-                            console.log('Loaded expenses from single-key storage:', parsed.length, 'items');
-                            return;
-                        }
-                    } catch (e) {
-                        console.warn('Failed to parse single-key expenses:', e);
-                    }
-                }
-
-                // PRIORITY 2: localStorage fallback (if CloudStorage not supported)
-                if (!isStorageSupported) {
-                    try {
-                        const local = localStorage.getItem('expenses');
-                        if (local) {
-                            const parsed = JSON.parse(local);
-                            if (Array.isArray(parsed) && parsed.length > 0) {
-                                state.expenses = parsed;
-                                console.log('Loaded expenses from localStorage:', parsed.length, 'items');
-                                return;
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
+                                tg.HapticFeedback.notificationOccurred('success');
+                            } else {
+                                tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
                             }
-                        }
-                    } catch (e) {
-                        console.warn('localStorage load failed', e);
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
+                        });
                     }
-                    state.expenses = [];
-                    return;
-                }
-
-                // PRIORITY 3: chunked load (only if single-key was empty/absent)
-                try {
-                    const values = await cloudGetItemsPromise(['expenses_chunk_count']);
-                    const countRaw = values && values.expenses_chunk_count;
-                    const count = countRaw ? parseInt(countRaw, 10) : 0;
-                    if (!count) {
-                        console.log('No chunked data found, starting with empty expenses.');
-                        state.expenses = [];
-                        return;
-                    }
-                    const keys = [];
-                    for (let i = 0; i < count; i++) keys.push(`expenses_chunk_${i}`);
-                    const chunkVals = await cloudGetItemsPromise(keys);
-                    let assembled = '';
-                    for (let i = 0; i < count; i++) assembled += chunkVals[`expenses_chunk_${i}`] || '';
-                    try {
-                        const parsed = JSON.parse(assembled);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            state.expenses = parsed;
-                            console.log('Loaded expenses from chunked storage:', parsed.length, 'items');
-                            return;
-                        }
-                    } catch (e) {
-                        console.error('Failed to parse assembled chunks', e);
-                    }
-                    state.expenses = [];
-                } catch (e) {
-                    console.error('Error loading chunked expenses', e);
-                    state.expenses = [];
-                }
+                });
             }
 
-            // --- Handlers ---
-            function handleFormSubmit(e) {
-                if (e) e.preventDefault();
+            // --- Data Handling ---
+            function handleFormSubmit() {
                 const amount = parseFloat(amountInput.value);
                 if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
-                    if (tg && tg.showAlert) tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។');
-                    else alert('Please fill all required fields.');
-                    return;
+                    tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។'); return;
                 }
-                if (tg && tg.MainButton && tg.MainButton.showProgress) tg.MainButton.showProgress();
+                tg.MainButton.showProgress();
                 const id = expenseIdInput.value;
                 const date = new Date(dateInput.value).toISOString();
                 if (id) {
                     const index = state.expenses.findIndex(e => e.id === id);
                     if (index > -1) state.expenses[index] = { ...state.expenses[index], amount, category: categorySelect.value, notes: notesInput.value.trim(), date };
                 } else {
-                    const newId = (self && self.crypto && self.crypto.randomUUID) ? self.crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2);
-                    state.expenses.push({ id: newId, amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
+                    state.expenses.push({ id: self.crypto.randomUUID(), amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
                 }
-                saveDataToCloud(() => { render(); closeModal(); if (tg && tg.MainButton && tg.MainButton.hideProgress) tg.MainButton.hideProgress(); if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
+                saveDataToCloud(() => { render(); closeModal(); tg.MainButton.hideProgress(); tg.HapticFeedback.notificationOccurred('success'); });
             }
-
+            
             function deleteExpense(id) {
-                if (tg && tg.showConfirm) {
-                    tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
-                        if (confirmed) {
-                            state.expenses = state.expenses.filter(e => e.id !== id);
-                            saveDataToCloud(() => { render(); if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); });
-                        }
-                    });
-                } else {
-                    if (confirm('Delete this expense?')) {
+                tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
+                    if (confirmed) {
                         state.expenses = state.expenses.filter(e => e.id !== id);
-                        saveDataToCloud(() => { render(); });
+                        saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
                     }
-                }
+                });
             }
 
-            // --- Initialization & event wiring ---
-            try {
-                if (tg && tg.expand) tg.expand();
-                applyTheme();
-                if (tg && tg.onEvent) tg.onEvent('themeChanged', applyTheme);
-                if (tg && tg.onEvent) tg.onEvent('mainButtonClicked', handleFormSubmit);
-            } catch (e) {
-                console.warn('Telegram WebApp methods not available', e);
+            function saveDataToCloud(callback) {
+                if (!isStorageSupported) {
+                    if (callback) callback();
+                    return;
+                }
+                const dataToSave = JSON.stringify(state.expenses);
+                tg.CloudStorage.setItem('expenses', dataToSave, (error) => {
+                    if (error) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទុកទិន្នន័យ: ${error}`);
+                    if (callback) callback();
+                });
             }
+
+            function loadInitialData() {
+                const user = tg.initDataUnsafe?.user;
+                if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
+
+                if (!isStorageSupported) {
+                    tg.showAlert('Telegram កំណែរបស់អ្នកចាស់ពេក។ ទិន្នន័យនឹងមិនត្រូវបានរក្សាទុកទេ។ សូមធ្វើបច្ចុប្បន្នភាព។');
+                    render();
+                    return;
+                }
+
+                tg.CloudStorage.getItems(['expenses', 'termsAccepted'], (error, values) => {
+                    if (error) { 
+                        tg.showAlert(`Error loading data: ${error}`); 
+                        render();
+                        return; 
+                    }
+
+                    if (!values.termsAccepted) {
+                        tg.showConfirm(
+                            "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទុកទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាពនៅក្នុង Telegram Cloud Storage។ តើអ្នកយល់ព្រមទេ?",
+                            (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => loadExpenses(values.expenses)) : tg.close()
+                        );
+                    } else { 
+                        loadExpenses(values.expenses); 
+                    }
+                });
+            }
+            
+            function loadExpenses(storedValue) {
+                 if (storedValue) { try { const p = JSON.parse(storedValue); state.expenses = Array.isArray(p) ? p : []; } catch (e) { state.expenses = []; } }
+                 render();
+            }
+
+            // --- Event Listeners & Final Setup ---
+            tg.expand();
+            applyTheme();
+            tg.onEvent('themeChanged', applyTheme);
+            tg.onEvent('mainButtonClicked', handleFormSubmit);
 
             fab.addEventListener('click', () => openModal());
             modalOverlay.addEventListener('click', closeModal);
             reportModalOverlay.addEventListener('click', closeReportModalFunc);
-
-            // Form submit handler (for fallback button and also for MainButton)
-            expenseForm.addEventListener('submit', handleFormSubmit);
 
             mainContent.addEventListener('click', (e) => {
                 const item = e.target.closest('.list-item');
                 if (item) {
                     const expense = state.expenses.find(ex => ex.id === item.dataset.id);
                     if (expense) {
-                        if (tg && tg.showPopup) {
-                            tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`, buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ] }, (buttonId) => {
-                                if (buttonId === 'edit') { openModal(expense); }
-                                else if (buttonId === 'delete') { deleteExpense(expense.id); }
-                            });
-                        } else {
-                            const action = prompt('Type "edit" to edit or "delete" to delete this expense.');
-                            if (action === 'edit') openModal(expense);
-                            else if (action === 'delete') deleteExpense(expense.id);
-                        }
+                        tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`,
+                            buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ]
+                        }, (buttonId) => {
+                            if (buttonId === 'edit') { openModal(expense); }
+                            else if (buttonId === 'delete') { deleteExpense(expense.id); }
+                        });
                     }
                 }
             });
 
             generateReportBtn.addEventListener('click', openReportModal);
-            generateReportConfirm.addEventListener('click', (e) => { e.preventDefault(); generateDetailedReport(); });
+            generateReportConfirm.addEventListener('click', generateDetailedReport);
             closeReportModal.addEventListener('click', closeReportModalFunc);
 
-            // Load cached local immediately to minimize flicker
-            try {
-                const ls = localStorage.getItem('expenses');
-                if (ls) {
-                    const parsed = JSON.parse(ls);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        state.expenses = parsed;
-                        console.log('Pre-loaded from localStorage:', parsed.length, 'items');
-                    }
-                }
-            } catch (e) {}
-
-            // Load initial cloud/local data (termsAccepted and expenses)
-            (async function loadInitialData() {
-                const user = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-                if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
-
-                if (!isStorageSupported) {
-                    // already pre-loaded from localStorage above
-                    render();
-                    return;
-                }
-
-                try {
-                    const values = await cloudGetItemsPromise(['expenses', 'termsAccepted']);
-                    const proceed = async (storedExpensesValue) => {
-                        await loadExpensesFromCloud(storedExpensesValue);
-                        render();
-                    };
-
-                    if (!values.termsAccepted) {
-                        if (tg && tg.showConfirm) {
-                            tg.showConfirm(
-                                "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាព។ តើអ្នកយល់ព្រមឲ្យកម្មវិធីរក្សាទិន្នន័យក្នុង Telegram CloudStorage ឬទេ?",
-                                (ok) => {
-                                    if (ok) {
-                                        tg.CloudStorage.setItem('termsAccepted', 'true', async () => { await proceed(values.expenses); });
-                                    } else {
-                                        if (tg && tg.close) tg.close();
-                                    }
-                                }
-                            );
-                        } else {
-                            await cloudSetItemPromise('termsAccepted', 'true').catch(() => {});
-                            await proceed(values.expenses);
-                        }
-                    } else {
-                        await proceed(values.expenses);
-                    }
-                } catch (err) {
-                    console.error('Error loading CloudStorage items:', err);
-                    // fallback to whatever was pre-loaded from localStorage
-                    render();
-                }
-            })();
+            loadInitialData();
         }
 
-        // --- App start ---
+        // --- Robust App Starter ---
         document.addEventListener('DOMContentLoaded', () => {
-            try {
-                if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.ready === 'function') {
-                    window.Telegram.WebApp.ready();
-                }
-                initializeApp();
-            } catch (e) {
-                console.error('App startup error:', e);
-                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហាក្នុងការចាប់ផ្តើម។ សូមពិនិត្យកុងសុលសម្រាប់ព័ត៌មានបន្ថែម។</div>`;
+            if (!window.Telegram || !window.Telegram.WebApp) {
+                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះនៅក្នុង Telegram។</div>`; return;
             }
+            try { window.Telegram.WebApp.ready(); initializeApp(); }
+            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហា: ${e.message}</div>`; }
         });
     </script>
 </body>
 </html>
+
