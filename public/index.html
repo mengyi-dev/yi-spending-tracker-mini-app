@@ -507,7 +507,8 @@
             function updateStorageUsageUI(notify = false, usedBytes = null) {
                 const bytes = usedBytes ?? new TextEncoder().encode(JSON.stringify(state.expenses)).length;
                 const usageRatio = Math.min(bytes / CLOUD_SOFT_LIMIT_BYTES, 1);
-                storageUsageFill.style.width = `${Math.max(usageRatio * 100, MIN_STORAGE_BAR_PERCENT)}%`;
+                const usagePercent = usageRatio > 0 ? Math.max(usageRatio * 100, MIN_STORAGE_BAR_PERCENT) : 0;
+                storageUsageFill.style.width = `${usagePercent}%`;
                 storageUsageText.textContent = `${formatStorage(bytes)} / ${formatStorage(CLOUD_SOFT_LIMIT_BYTES)}`;
                 storageModeText.textContent = state.storageMode === 'cloud'
                     ? 'Storage: Telegram Cloud'
@@ -774,7 +775,7 @@
                 }
 
                 const bytes = new TextEncoder().encode(dataToSave).length;
-                if (bytes >= CLOUD_SOFT_LIMIT_BYTES) {
+                if (bytes > CLOUD_SOFT_LIMIT_BYTES) {
                     state.storageMode = 'local';
                     safeLocalStorageSet(dataToSave);
                     updateStorageUsageUI(true, bytes);
@@ -790,7 +791,7 @@
                     } else {
                         state.storageMode = 'cloud';
                         if (!safeLocalStorageSet(dataToSave)) {
-                            console.warn('Local backup storage save failed.');
+                            console.warn('Failed to save backup to localStorage - quota may be exceeded or storage may be disabled.');
                         }
                     }
                     runCallback();
@@ -829,7 +830,7 @@
             
             function loadExpenses(storedValue) {
                  const localValue = safeLocalStorageGet();
-                 const preferredValue = storedValue || localValue;
+                 const preferredValue = (storedValue !== null && storedValue !== undefined) ? storedValue : localValue;
                  if (preferredValue) {
                     try {
                         const parsed = JSON.parse(preferredValue);
