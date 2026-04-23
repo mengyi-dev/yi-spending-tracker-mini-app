@@ -65,6 +65,42 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
             overflow: hidden;
         }
+
+        .stat-card {
+            background: linear-gradient(135deg, color-mix(in srgb, var(--button-color) 14%, var(--secondary-bg-color) 86%), var(--secondary-bg-color));
+            border: 1px solid color-mix(in srgb, var(--button-color) 20%, transparent 80%);
+        }
+
+        .storage-bar-track {
+            width: 100%;
+            height: 8px;
+            border-radius: 999px;
+            background-color: color-mix(in srgb, var(--hint-color) 20%, var(--secondary-bg-color) 80%);
+            overflow: hidden;
+        }
+
+        .storage-bar-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #34c759, #ffcc00, #ff3b30);
+            transition: width 0.25s ease;
+        }
+
+        .filter-chip {
+            border-radius: 999px;
+            border: 1px solid color-mix(in srgb, var(--hint-color) 35%, transparent 65%);
+            color: var(--hint-color);
+            font-size: 0.8rem;
+            padding: 0.35rem 0.7rem;
+            transition: all 0.2s ease;
+        }
+
+        .filter-chip.active {
+            color: var(--button-text-color);
+            background-color: var(--button-color);
+            border-color: var(--button-color);
+        }
         
         .list-item {
             display: flex;
@@ -174,9 +210,36 @@
         </header>
 
         <main id="main-content" class="pb-32">
+             <div class="content-card stat-card p-4 mt-4">
+                <div class="flex justify-between items-center gap-2">
+                    <div>
+                        <h2 class="text-base font-semibold">Storage Status</h2>
+                        <p id="storage-mode-text" class="text-sm" style="color: var(--hint-color);">Checking...</p>
+                    </div>
+                    <button id="check-storage-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">
+                        Check
+                    </button>
+                </div>
+                <div class="mt-3 storage-bar-track">
+                    <div id="storage-usage-fill" class="storage-bar-fill"></div>
+                </div>
+                <div class="mt-2 flex justify-between text-xs" style="color: var(--hint-color);">
+                    <span id="storage-usage-text">0 KB / 0 KB</span>
+                    <span id="storage-warning-text">-</span>
+                </div>
+             </div>
+
              <div class="content-card p-4 mt-4">
                 <h2 class="text-lg font-semibold mb-2">ចំណាយប្រចាំខែនេះ</h2>
                 <canvas id="expense-chart"></canvas>
+             </div>
+             <div class="content-card p-4">
+                <div class="flex items-center gap-2 mb-3">
+                    <button class="filter-chip active" data-period-filter="all">ទាំងអស់</button>
+                    <button class="filter-chip" data-period-filter="today">ថ្ងៃនេះ</button>
+                    <button class="filter-chip" data-period-filter="month">ខែនេះ</button>
+                </div>
+                <input id="search-input" type="text" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="ស្វែងរកតាមចំណាំ ឬប្រភេទ...">
              </div>
              <div id="history-placeholder" class="text-center py-16 px-4" style="color: var(--hint-color);">
                 <p class="text-lg">មិនទាន់មានការចំណាយទេ។</p>
@@ -236,9 +299,13 @@
         function initializeApp() {
             const tg = window.Telegram.WebApp;
             const isStorageSupported = tg.isVersionAtLeast('6.9');
+            const CLOUD_SOFT_LIMIT_BYTES = 32 * 1024;
+            const STORAGE_WARNING_THRESHOLD = 0.8;
+            const LOCAL_STORAGE_KEY = 'yi_spending_tracker_expenses';
 
             const state = {
                 expenses: [],
+                filteredExpenses: [],
                 categories: [
                     { id: 'food', name: 'អាហារ', icon: '🍔', color: '#FF6384' },
                     { id: 'transport', name: 'ការធ្វើដំណើរ', icon: '🛵', color: '#36A2EB' },
@@ -248,6 +315,11 @@
                     { id: 'other', name: 'ផ្សេងៗ', icon: '💸', color: '#C9CBCF' },
                 ],
                 chartInstance: null,
+                storageMode: 'unknown',
+                ui: {
+                    search: '',
+                    periodFilter: 'all',
+                },
             };
             
             // UI Elements
@@ -255,9 +327,16 @@
             const totalTodayEl = document.getElementById('total-today');
             const totalWeekEl = document.getElementById('total-week');
             const totalMonthEl = document.getElementById('total-month');
+            const storageModeText = document.getElementById('storage-mode-text');
+            const storageUsageFill = document.getElementById('storage-usage-fill');
+            const storageUsageText = document.getElementById('storage-usage-text');
+            const storageWarningText = document.getElementById('storage-warning-text');
+            const checkStorageBtn = document.getElementById('check-storage-btn');
             const mainContent = document.getElementById('main-content');
             const historyPlaceholder = document.getElementById('history-placeholder');
             const chartCanvas = document.getElementById('expense-chart').getContext('2d');
+            const searchInput = document.getElementById('search-input');
+            const filterChips = document.querySelectorAll('[data-period-filter]');
             const fab = document.getElementById('fab');
             const generateReportBtn = document.getElementById('generate-report');
 
@@ -297,12 +376,40 @@
             }
             
             const formatCurrency = (amount) => new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
+            const formatStorage = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
+            const safeAlert = (message) => (tg.showAlert ? tg.showAlert(message) : alert(message));
+            const isCloudAvailable = () => isStorageSupported && tg.CloudStorage && typeof tg.CloudStorage.getItems === 'function' && typeof tg.CloudStorage.setItem === 'function';
+            const safeLocalStorageGet = () => {
+                try { return localStorage.getItem(LOCAL_STORAGE_KEY); } catch (e) { return null; }
+            };
+            const safeLocalStorageSet = (value) => {
+                try { localStorage.setItem(LOCAL_STORAGE_KEY, value); return true; } catch (e) { return false; }
+            };
 
             function render() {
+                state.filteredExpenses = getFilteredExpenses();
                 renderSummaries();
                 renderExpenseHistory();
                 renderCategoriesInDropdown();
                 renderChart();
+                updateStorageUsageUI();
+            }
+
+            function getFilteredExpenses() {
+                const keyword = state.ui.search.trim().toLowerCase();
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const monthPrefix = todayStr.slice(0, 7);
+                return state.expenses.filter(expense => {
+                    const noteText = (expense.notes || '').toLowerCase();
+                    const category = state.categories.find(c => c.id === expense.category);
+                    const categoryName = (category?.name || '').toLowerCase();
+                    const matchesKeyword = !keyword || noteText.includes(keyword) || categoryName.includes(keyword);
+                    const dateOnly = expense.date.slice(0, 10);
+                    const matchesPeriod = state.ui.periodFilter === 'all'
+                        || (state.ui.periodFilter === 'today' && dateOnly === todayStr)
+                        || (state.ui.periodFilter === 'month' && dateOnly.startsWith(monthPrefix));
+                    return matchesKeyword && matchesPeriod;
+                });
             }
 
             function renderSummaries() {
@@ -347,12 +454,12 @@
                 mainContent.querySelector('#history-placeholder')?.remove();
                 mainContent.querySelectorAll('.date-header, .content-card.expense-list-container').forEach(el => el.remove());
                 
-                if (state.expenses.length === 0) {
+                if (state.filteredExpenses.length === 0) {
                     mainContent.insertAdjacentElement('beforeend', historyPlaceholder);
                     return;
                 }
 
-                const grouped = state.expenses.reduce((acc, expense) => {
+                const grouped = state.filteredExpenses.reduce((acc, expense) => {
                     const date = expense.date.slice(0, 10);
                     if (!acc[date]) acc[date] = []; acc[date].push(expense); return acc;
                 }, {});
@@ -394,6 +501,28 @@
                 state.categories.forEach(cat => {
                     categorySelect.innerHTML += `<option value="${cat.id}">${cat.icon} ${cat.name}</option>`;
                 });
+            }
+
+            function updateStorageUsageUI(notify = false) {
+                const payload = JSON.stringify(state.expenses);
+                const usedBytes = new TextEncoder().encode(payload).length;
+                const usageRatio = Math.min(usedBytes / CLOUD_SOFT_LIMIT_BYTES, 1);
+                storageUsageFill.style.width = `${Math.max(usageRatio * 100, 2)}%`;
+                storageUsageText.textContent = `${formatStorage(usedBytes)} / ${formatStorage(CLOUD_SOFT_LIMIT_BYTES)}`;
+                storageModeText.textContent = state.storageMode === 'cloud'
+                    ? 'Storage: Telegram Cloud'
+                    : state.storageMode === 'local'
+                        ? 'Storage: Local backup mode'
+                        : 'Storage: Checking...';
+                if (usageRatio >= 1) {
+                    storageWarningText.textContent = 'Cloud limit reached';
+                    if (notify) safeAlert('Cloud Storage is full. App will continue using local backup storage.');
+                } else if (usageRatio >= STORAGE_WARNING_THRESHOLD) {
+                    storageWarningText.textContent = 'Nearly full';
+                    if (notify) safeAlert('Storage is almost full. Consider removing old records.');
+                } else {
+                    storageWarningText.textContent = 'Healthy';
+                }
             }
 
             // --- Modals ---
@@ -607,7 +736,7 @@
             function handleFormSubmit() {
                 const amount = parseFloat(amountInput.value);
                 if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
-                    tg.showAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។'); return;
+                    safeAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។'); return;
                 }
                 tg.MainButton.showProgress();
                 const id = expenseIdInput.value;
@@ -631,14 +760,38 @@
             }
 
             function saveDataToCloud(callback) {
-                if (!isStorageSupported) {
+                const dataToSave = JSON.stringify(state.expenses);
+                const runCallback = () => {
+                    updateStorageUsageUI();
                     if (callback) callback();
+                };
+
+                if (!isCloudAvailable()) {
+                    state.storageMode = 'local';
+                    safeLocalStorageSet(dataToSave);
+                    runCallback();
                     return;
                 }
-                const dataToSave = JSON.stringify(state.expenses);
+
+                const bytes = new TextEncoder().encode(dataToSave).length;
+                if (bytes >= CLOUD_SOFT_LIMIT_BYTES) {
+                    state.storageMode = 'local';
+                    safeLocalStorageSet(dataToSave);
+                    updateStorageUsageUI(true);
+                    runCallback();
+                    return;
+                }
+
                 tg.CloudStorage.setItem('expenses', dataToSave, (error) => {
-                    if (error) tg.showAlert(`មានបញ្ហាក្នុងការរក្សាទុកទិន្នន័យ: ${error}`);
-                    if (callback) callback();
+                    if (error) {
+                        state.storageMode = 'local';
+                        safeLocalStorageSet(dataToSave);
+                        safeAlert('Cloud Storage មានបញ្ហា។ កម្មវិធីបានប្ដូរទៅ Local Storage បណ្តោះអាសន្ន។');
+                    } else {
+                        state.storageMode = 'cloud';
+                        safeLocalStorageSet(dataToSave);
+                    }
+                    runCallback();
                 });
             }
 
@@ -646,22 +799,24 @@
                 const user = tg.initDataUnsafe?.user;
                 if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
 
-                if (!isStorageSupported) {
-                    tg.showAlert('Telegram កំណែរបស់អ្នកចាស់ពេក។ ទិន្នន័យនឹងមិនត្រូវបានរក្សាទុកទេ។ សូមធ្វើបច្ចុប្បន្នភាព។');
-                    render();
+                if (!isCloudAvailable()) {
+                    state.storageMode = 'local';
+                    loadExpenses(safeLocalStorageGet());
+                    safeAlert('Telegram កំណែរបស់អ្នកចាស់ពេក ឬ Cloud Storage មិនអាចប្រើបាន។ កម្មវិធីនឹងប្រើ Local Storage។');
                     return;
                 }
 
                 tg.CloudStorage.getItems(['expenses', 'termsAccepted'], (error, values) => {
                     if (error) { 
-                        tg.showAlert(`Error loading data: ${error}`); 
-                        render();
+                        state.storageMode = 'local';
+                        loadExpenses(safeLocalStorageGet());
+                        safeAlert(`Error loading cloud data: ${error}. Switched to local backup.`); 
                         return; 
                     }
 
                     if (!values.termsAccepted) {
                         tg.showConfirm(
-                            "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទុកទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាពនៅក្នុង Telegram Cloud Storage។ តើអ្នកយល់ព្រមទេ?",
+                            "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទុកទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាពនៅក្នុង Telegram Cloud Storage និងមាន Local Backup។ តើអ្នកយល់ព្រមទេ?",
                             (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => loadExpenses(values.expenses)) : tg.close()
                         );
                     } else { 
@@ -671,7 +826,20 @@
             }
             
             function loadExpenses(storedValue) {
-                 if (storedValue) { try { const p = JSON.parse(storedValue); state.expenses = Array.isArray(p) ? p : []; } catch (e) { state.expenses = []; } }
+                 const localValue = safeLocalStorageGet();
+                 const preferredValue = storedValue || localValue;
+                 if (preferredValue) {
+                    try {
+                        const parsed = JSON.parse(preferredValue);
+                        state.expenses = Array.isArray(parsed) ? parsed : [];
+                    } catch (e) {
+                        state.expenses = [];
+                    }
+                 }
+                 if (storedValue) state.storageMode = 'cloud';
+                 else if (localValue) state.storageMode = 'local';
+                 else state.storageMode = isCloudAvailable() ? 'cloud' : 'local';
+                 if (!localValue && state.expenses.length > 0) safeLocalStorageSet(JSON.stringify(state.expenses));
                  render();
             }
 
@@ -703,6 +871,18 @@
             generateReportBtn.addEventListener('click', openReportModal);
             generateReportConfirm.addEventListener('click', generateDetailedReport);
             closeReportModal.addEventListener('click', closeReportModalFunc);
+            checkStorageBtn.addEventListener('click', () => updateStorageUsageUI(true));
+            searchInput.addEventListener('input', (e) => {
+                state.ui.search = e.target.value;
+                render();
+            });
+            filterChips.forEach(chip => {
+                chip.addEventListener('click', () => {
+                    state.ui.periodFilter = chip.dataset.periodFilter;
+                    filterChips.forEach(btn => btn.classList.toggle('active', btn === chip));
+                    render();
+                });
+            });
 
             loadInitialData();
         }
