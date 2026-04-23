@@ -271,13 +271,13 @@
                     <h2 class="text-lg font-semibold mb-3">Budget & Goals</h2>
                     <div class="grid grid-cols-2 gap-2 mb-3">
                         <input id="budget-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Monthly budget">
-                        <button id="save-budget-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">រក្សាទុក Budget</button>
+                        <button id="save-budget-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save Budget</button>
                     </div>
                     <div class="grid grid-cols-2 gap-2 mb-3">
                         <input id="savings-target-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Savings target">
                         <input id="savings-current-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Already saved">
                     </div>
-                    <button id="save-savings-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">រក្សាទុក Goal</button>
+                    <button id="save-savings-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save Goal</button>
                     <div class="mt-3 text-sm" style="color: var(--hint-color);">
                         <p id="budget-status-text">Budget status: -</p>
                         <p id="savings-status-text">Savings progress: -</p>
@@ -387,10 +387,10 @@
         </div>
 
         <nav class="bottom-nav">
-            <button class="bottom-nav-btn active" data-section="dashboard"><span>🏠</span><span>Home</span></button>
-            <button class="bottom-nav-btn" data-section="transactions"><span>🧾</span><span>Transactions</span></button>
-            <button class="bottom-nav-btn" data-section="analytics"><span>📈</span><span>Analytics</span></button>
-            <button class="bottom-nav-btn" data-section="manage"><span>⚙️</span><span>Manage</span></button>
+            <button class="bottom-nav-btn active" data-section="dashboard" aria-label="Dashboard"><span>🏠</span><span>Home</span></button>
+            <button class="bottom-nav-btn" data-section="transactions" aria-label="Transactions"><span>🧾</span><span>Transactions</span></button>
+            <button class="bottom-nav-btn" data-section="analytics" aria-label="Analytics"><span>📈</span><span>Analytics</span></button>
+            <button class="bottom-nav-btn" data-section="manage" aria-label="Manage"><span>⚙️</span><span>Manage</span></button>
         </nav>
     </div>
 
@@ -445,6 +445,7 @@
             const CLOUD_SOFT_LIMIT_BYTES = 32 * 1024;
             const STORAGE_WARNING_THRESHOLD = 0.8;
             const MIN_STORAGE_BAR_PERCENT = 2;
+            const DEFAULT_CATEGORY_ID = 'other';
             const LOCAL_STORAGE_KEY = 'yi_spending_tracker_expenses';
             const AUX_STORAGE_KEY = 'yi_spending_tracker_aux_data';
 
@@ -587,8 +588,20 @@
                 if (!raw) return fallback;
                 try { return JSON.parse(raw); } catch (e) { return fallback; }
             };
+            let fallbackIdCounter = 0;
+            const generateId = (prefix = 'id') => {
+                if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+                const perf = Math.floor((window.performance?.now?.() || 0) * 1000);
+                fallbackIdCounter += 1;
+                return `${prefix}_${Date.now()}_${perf}_${fallbackIdCounter}_${Math.random().toString(16).slice(2, 10)}`;
+            };
+            const isKhLocale = () => (state.settings.locale || 'km-KH').startsWith('km');
+            const t = (kh, en) => isKhLocale() ? kh : en;
             const getAllCategories = () => [...state.defaultCategories, ...state.customCategories];
             const randomColor = () => `hsl(${Math.floor(Math.random() * 360)} 70% 60%)`;
+            const sanitizeText = (value, max = 120) => String(value || '').replace(/[<>]/g, '').trim().slice(0, max);
+            const normalizeFrequency = (value) => ['daily', 'weekly', 'monthly'].includes(value) ? value : 'monthly';
+            const isValidExpense = (e) => Number.isFinite(Number(e?.amount)) && Number(e.amount) > 0 && typeof e?.category === 'string' && !Number.isNaN(new Date(e?.date).getTime());
 
             function render() {
                 state.filteredExpenses = getFilteredExpenses();
@@ -800,6 +813,18 @@
                 localeSelect.value = state.settings.locale || 'km-KH';
                 deleteConfirmCheckbox.checked = state.settings.requireDeleteConfirm !== false;
                 sortSelect.value = state.ui.sortBy;
+                saveBudgetBtn.textContent = t('រក្សាទុកថវិកា', 'Save Budget');
+                saveSavingsBtn.textContent = t('រក្សាទុកគោលដៅ', 'Save Goal');
+                const navText = {
+                    dashboard: t('ទំព័រដើម', 'Home'),
+                    transactions: t('ប្រតិបត្តិការ', 'Transactions'),
+                    analytics: t('វិភាគ', 'Analytics'),
+                    manage: t('គ្រប់គ្រង', 'Manage'),
+                };
+                navButtons.forEach((btn) => {
+                    const label = btn.querySelector('span:last-child');
+                    if (label) label.textContent = navText[btn.dataset.section] || btn.dataset.section;
+                });
             }
 
             function setActiveSection(sectionName) {
@@ -1074,7 +1099,7 @@
                     const index = state.expenses.findIndex(e => e.id === id);
                     if (index > -1) state.expenses[index] = { ...state.expenses[index], amount, category: categorySelect.value, notes: notesInput.value.trim(), date };
                 } else {
-                    state.expenses.push({ id: self.crypto.randomUUID(), amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
+                    state.expenses.push({ id: generateId(), amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
                 }
                 saveDataToCloud(() => { render(); closeModal(); tg.MainButton.hideProgress(); tg.HapticFeedback.notificationOccurred('success'); });
             }
@@ -1097,7 +1122,7 @@
                 const source = state.expenses.find(e => e.id === id);
                 if (!source) return;
                 state.expenses.push({
-                    id: self.crypto.randomUUID(),
+                    id: generateId(),
                     amount: source.amount,
                     category: source.category,
                     notes: source.notes ? `${source.notes} (copy)` : 'Copied expense',
@@ -1111,7 +1136,7 @@
                 const last = new Date(item.lastAppliedDate);
                 const now = new Date();
                 if (item.frequency === 'daily') return now.toDateString() !== last.toDateString();
-                if (item.frequency === 'weekly') return now - last >= 7 * 24 * 60 * 60 * 1000;
+                if (item.frequency === 'weekly') return Math.floor((now - last) / (24 * 60 * 60 * 1000)) >= 7;
                 if (item.frequency === 'monthly') return now.getMonth() !== last.getMonth() || now.getFullYear() !== last.getFullYear();
                 return false;
             }
@@ -1120,7 +1145,7 @@
                 const item = state.recurringItems.find(r => r.id === itemId);
                 if (!item) return;
                 state.expenses.push({
-                    id: self.crypto.randomUUID(),
+                    id: generateId(),
                     amount: Number(item.amount),
                     category: item.category,
                     notes: `[Recurring] ${item.name}`,
@@ -1139,7 +1164,7 @@
                 }
                 dueItems.forEach(item => {
                     state.expenses.push({
-                        id: self.crypto.randomUUID(),
+                        id: generateId(),
                         amount: Number(item.amount),
                         category: item.category,
                         notes: `[Recurring] ${item.name}`,
@@ -1157,7 +1182,7 @@
                     safeAlert('Please input category name.');
                     return;
                 }
-                const id = `custom_${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+                const id = generateId('custom');
                 state.customCategories.push({ id, name, icon: '🏷️', color: randomColor() });
                 categoryNameInput.value = '';
                 saveAuxData();
@@ -1165,10 +1190,14 @@
             }
 
             function removeCustomCategory(categoryId) {
+                const affectedCount = state.expenses.filter(exp => exp.category === categoryId).length;
                 state.customCategories = state.customCategories.filter(c => c.id !== categoryId);
-                state.expenses = state.expenses.map(exp => exp.category === categoryId ? { ...exp, category: 'other' } : exp);
+                state.expenses = state.expenses.map(exp => exp.category === categoryId ? { ...exp, category: DEFAULT_CATEGORY_ID } : exp);
                 saveAuxData();
-                saveDataToCloud(() => render());
+                saveDataToCloud(() => {
+                    render();
+                    if (affectedCount > 0) safeAlert(t(`បានប្ដូរចំណាយ ${affectedCount} ទៅប្រភេទ "ផ្សេងៗ"។`, `${affectedCount} expense(s) were reassigned to "Other".`));
+                });
             }
 
             function addRecurringItem() {
@@ -1181,11 +1210,11 @@
                     return;
                 }
                 state.recurringItems.push({
-                    id: self.crypto.randomUUID(),
-                    name,
+                    id: generateId(),
+                    name: sanitizeText(name, 80),
                     amount,
                     category,
-                    frequency,
+                    frequency: normalizeFrequency(frequency),
                     lastAppliedDate: null
                 });
                 recurringNameInput.value = '';
@@ -1212,7 +1241,7 @@
             }
 
             function resetThisMonthData() {
-                tg.showConfirm('Reset all expenses in this month?', (ok) => {
+                tg.showConfirm(t('លុបចំណាយប្រចាំខែនេះទាំងអស់?', 'Reset all expenses in this month?'), (ok) => {
                     if (!ok) return;
                     const monthPrefix = new Date().toISOString().slice(0, 7);
                     state.expenses = state.expenses.filter(e => !e.date.startsWith(monthPrefix));
@@ -1261,9 +1290,39 @@
                 reader.onload = () => {
                     try {
                         const parsed = JSON.parse(reader.result);
-                        state.expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
-                        state.customCategories = Array.isArray(parsed.customCategories) ? parsed.customCategories : [];
-                        state.recurringItems = Array.isArray(parsed.recurringItems) ? parsed.recurringItems : [];
+                        const validExpenses = Array.isArray(parsed.expenses) ? parsed.expenses
+                            .filter(isValidExpense)
+                            .map(e => ({
+                                id: sanitizeText(e.id || generateId(), 80),
+                                amount: Number(e.amount),
+                                category: sanitizeText(e.category, 80) || DEFAULT_CATEGORY_ID,
+                                notes: sanitizeText(e.notes || '', 200),
+                                date: new Date(e.date).toISOString()
+                            })) : [];
+                        const validCustomCategories = Array.isArray(parsed.customCategories) ? parsed.customCategories
+                            .filter(c => typeof c.name === 'string' && c.name.trim())
+                            .map(c => ({
+                                id: sanitizeText(c.id || generateId('custom'), 80),
+                                name: sanitizeText(c.name, 60),
+                                icon: sanitizeText(c.icon || '🏷️', 4),
+                                color: sanitizeText(c.color || randomColor(), 24),
+                            })) : [];
+                        const validRecurring = Array.isArray(parsed.recurringItems) ? parsed.recurringItems
+                            .filter(r => Number.isFinite(Number(r.amount)) && Number(r.amount) > 0 && typeof r.category === 'string' && typeof r.name === 'string')
+                            .map(r => ({
+                                id: sanitizeText(r.id || generateId(), 80),
+                                name: sanitizeText(r.name, 80),
+                                amount: Number(r.amount),
+                                category: sanitizeText(r.category, 80),
+                                frequency: normalizeFrequency(r.frequency),
+                                lastAppliedDate: (() => {
+                                    const recurringDate = r.lastAppliedDate ? new Date(r.lastAppliedDate) : null;
+                                    return recurringDate && !Number.isNaN(recurringDate.getTime()) ? recurringDate.toISOString() : null;
+                                })()
+                            })) : [];
+                        state.expenses = validExpenses;
+                        state.customCategories = validCustomCategories;
+                        state.recurringItems = validRecurring;
                         state.budget = parsed.budget || { monthly: 0 };
                         state.savingsGoal = parsed.savingsGoal || { target: 0, saved: 0 };
                         state.settings = { ...state.settings, ...(parsed.settings || {}) };
@@ -1391,8 +1450,8 @@
                 if (item) {
                     const expense = state.expenses.find(ex => ex.id === item.dataset.id);
                     if (expense) {
-                        tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`,
-                            buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'duplicate', type: 'default', text: 'ចម្លង'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ]
+                        tg.showPopup({ title: t('ជ្រើសរើសសកម្មភាព', 'Choose action'), message: `${t('ចំណាយលើ', 'Expense')}: "${expense.notes || t('គ្មានកំណត់ចំណាំ', 'No notes')}"`,
+                            buttons: [ {id: 'edit', type: 'default', text: t('កែសម្រួល', 'Edit')}, {id: 'duplicate', type: 'default', text: t('ចម្លង', 'Duplicate')}, {id: 'delete', type: 'destructive', text: t('លុប', 'Delete')}, {type: 'cancel'} ]
                         }, (buttonId) => {
                             if (buttonId === 'edit') { openModal(expense); }
                             else if (buttonId === 'duplicate') { duplicateExpense(expense.id); }
