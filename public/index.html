@@ -83,7 +83,7 @@
             height: 100%;
             width: 0%;
             border-radius: 999px;
-            background: linear-gradient(90deg, var(--button-color), color-mix(in srgb, var(--button-color) 65%, #ffcc00 35%), var(--danger-color));
+            background: linear-gradient(90deg, var(--button-color), color-mix(in srgb, var(--button-color) 65%, var(--hint-color) 35%), var(--danger-color));
             transition: width 0.25s ease;
         }
 
@@ -299,6 +299,7 @@
         function initializeApp() {
             const tg = window.Telegram.WebApp;
             const isStorageSupported = tg.isVersionAtLeast('6.9');
+            // Soft cap for warning/fallback to avoid frequent CloudStorage write failures near practical limits.
             const CLOUD_SOFT_LIMIT_BYTES = 32 * 1024;
             const STORAGE_WARNING_THRESHOLD = 0.8;
             const MIN_STORAGE_BAR_PERCENT = 2;
@@ -507,7 +508,7 @@
             function updateStorageUsageUI(notify = false, usedBytes = null) {
                 const bytes = usedBytes ?? new TextEncoder().encode(JSON.stringify(state.expenses)).length;
                 const usageRatio = Math.min(bytes / CLOUD_SOFT_LIMIT_BYTES, 1);
-                const usagePercent = usageRatio > 0 ? Math.max(usageRatio * 100, MIN_STORAGE_BAR_PERCENT) : 0;
+                const usagePercent = usageRatio === 0 ? 0 : Math.max(usageRatio * 100, MIN_STORAGE_BAR_PERCENT);
                 storageUsageFill.style.width = `${usagePercent}%`;
                 storageUsageText.textContent = `${formatStorage(bytes)} / ${formatStorage(CLOUD_SOFT_LIMIT_BYTES)}`;
                 storageModeText.textContent = state.storageMode === 'cloud'
@@ -840,7 +841,11 @@
                     }
                  }
                  state.storageMode = isCloudAvailable() ? 'cloud' : 'local';
-                 if (!localValue && state.expenses.length > 0) safeLocalStorageSet(JSON.stringify(state.expenses));
+                 if (storedValue !== null && storedValue !== undefined) {
+                    safeLocalStorageSet(JSON.stringify(state.expenses));
+                 } else if (!localValue && state.expenses.length > 0) {
+                    safeLocalStorageSet(JSON.stringify(state.expenses));
+                 }
                  render();
             }
 
