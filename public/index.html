@@ -180,6 +180,43 @@
             appearance: none;
             background: transparent;
         }
+
+        .section-panel.hidden {
+            display: none;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--secondary-bg-color);
+            border-top: 1px solid var(--bg-color);
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.25rem;
+            padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0));
+            z-index: 25;
+        }
+
+        .bottom-nav-btn {
+            border: none;
+            background: transparent;
+            color: var(--hint-color);
+            border-radius: 0.6rem;
+            padding: 0.5rem 0.3rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2rem;
+        }
+
+        .bottom-nav-btn.active {
+            color: var(--button-color);
+            background: color-mix(in srgb, var(--button-color) 12%, var(--secondary-bg-color) 88%);
+        }
     </style>
 </head>
 <body>
@@ -209,8 +246,9 @@
             </div>
         </header>
 
-        <main id="main-content" class="pb-32">
-             <div class="content-card stat-card p-4 mt-4">
+        <main id="main-content" class="pb-44">
+             <section id="section-dashboard" class="section-panel">
+                <div class="content-card stat-card p-4 mt-4">
                 <div class="flex justify-between items-center gap-2">
                     <div>
                         <h2 class="text-base font-semibold">Storage Status</h2>
@@ -223,33 +261,137 @@
                 <div class="mt-3 storage-bar-track">
                     <div id="storage-usage-fill" class="storage-bar-fill"></div>
                 </div>
-                <div class="mt-2 flex justify-between text-xs" style="color: var(--hint-color);">
-                    <span id="storage-usage-text">0 KB / 0 KB</span>
-                    <span id="storage-warning-text">-</span>
+                 <div class="mt-2 flex justify-between text-xs" style="color: var(--hint-color);">
+                     <span id="storage-usage-text">0 KB / 0 KB</span>
+                     <span id="storage-warning-text">-</span>
+                 </div>
                 </div>
-             </div>
 
-             <div class="content-card p-4 mt-4">
+                <div class="content-card p-4 mt-4">
+                    <h2 class="text-lg font-semibold mb-3">Budget & Goals</h2>
+                    <div class="grid grid-cols-2 gap-2 mb-3">
+                        <input id="budget-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Monthly budget">
+                        <button id="save-budget-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">រក្សាទុក Budget</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 mb-3">
+                        <input id="savings-target-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Savings target">
+                        <input id="savings-current-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Already saved">
+                    </div>
+                    <button id="save-savings-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">រក្សាទុក Goal</button>
+                    <div class="mt-3 text-sm" style="color: var(--hint-color);">
+                        <p id="budget-status-text">Budget status: -</p>
+                        <p id="savings-status-text">Savings progress: -</p>
+                    </div>
+                </div>
+
+                <div class="content-card p-4 mt-4">
+                    <h2 class="text-lg font-semibold mb-2">Quick Actions</h2>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="apply-recurring-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Apply Recurring</button>
+                        <button id="clear-filters-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Clear Filters</button>
+                        <button id="reset-month-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Reset This Month</button>
+                        <button id="check-storage-btn-2" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Check Storage</button>
+                    </div>
+                </div>
+             </section>
+
+             <section id="section-analytics" class="section-panel hidden">
+                <div class="content-card p-4 mt-4">
                 <h2 class="text-lg font-semibold mb-2">ចំណាយប្រចាំខែនេះ</h2>
                 <canvas id="expense-chart"></canvas>
-             </div>
-             <div class="content-card p-4">
-                <div class="flex items-center gap-2 mb-3">
-                    <button class="filter-chip active" data-period-filter="all">ទាំងអស់</button>
-                    <button class="filter-chip" data-period-filter="today">ថ្ងៃនេះ</button>
-                    <button class="filter-chip" data-period-filter="month">ខែនេះ</button>
                 </div>
-                <input id="search-input" type="text" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="ស្វែងរកតាមចំណាំ ឬប្រភេទ...">
-             </div>
-             <div id="history-placeholder" class="text-center py-16 px-4" style="color: var(--hint-color);">
-                <p class="text-lg">មិនទាន់មានការចំណាយទេ។</p>
-                <p class="mt-2">ចុចប៊ូតុង (+) ដើម្បីបន្ថែមការចំណាយដំបូងរបស់អ្នក។</p>
-            </div>
+                <div class="content-card p-4">
+                    <h2 class="text-lg font-semibold mb-2">Analytics</h2>
+                    <div class="grid grid-cols-2 gap-2 text-sm">
+                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Transactions</p><p id="analytics-total-transactions" class="font-bold">0</p></div>
+                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Avg / Txn</p><p id="analytics-avg-transaction" class="font-bold">៛០</p></div>
+                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Top Category</p><p id="analytics-top-category" class="font-bold">-</p></div>
+                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Largest Expense</p><p id="analytics-largest-expense" class="font-bold">៛០</p></div>
+                    </div>
+                </div>
+             </section>
+
+             <section id="section-transactions" class="section-panel hidden">
+                <div class="content-card p-4 mt-4">
+                 <div class="flex items-center gap-2 mb-3">
+                     <button class="filter-chip active" data-period-filter="all">ទាំងអស់</button>
+                     <button class="filter-chip" data-period-filter="today">ថ្ងៃនេះ</button>
+                     <button class="filter-chip" data-period-filter="month">ខែនេះ</button>
+                 </div>
+                 <select id="sort-select" class="w-full p-3 border-0 rounded-lg text-sm mb-3" style="background-color: var(--bg-color);">
+                    <option value="date_desc">ថ្មីទៅចាស់</option>
+                    <option value="date_asc">ចាស់ទៅថ្មី</option>
+                    <option value="amount_desc">ចំណាយច្រើនទៅតិច</option>
+                    <option value="amount_asc">ចំណាយតិចទៅច្រើន</option>
+                 </select>
+                 <input id="search-input" type="text" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="ស្វែងរកតាមចំណាំ ឬប្រភេទ...">
+                </div>
+                <div id="history-placeholder" class="text-center py-16 px-4" style="color: var(--hint-color);">
+                 <p class="text-lg">មិនទាន់មានការចំណាយទេ។</p>
+                 <p class="mt-2">ចុចប៊ូតុង (+) ដើម្បីបន្ថែមការចំណាយដំបូងរបស់អ្នក។</p>
+                </div>
+             </section>
+
+             <section id="section-manage" class="section-panel hidden">
+                <div class="content-card p-4 mt-4">
+                    <h2 class="text-lg font-semibold mb-2">Custom Categories</h2>
+                    <div class="grid grid-cols-3 gap-2 mb-2">
+                        <input id="category-name-input" type="text" class="p-3 border-0 rounded-lg text-sm col-span-2" style="background-color: var(--bg-color);" placeholder="Category name">
+                        <button id="add-category-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Add</button>
+                    </div>
+                    <div id="custom-categories-list" class="space-y-2 text-sm"></div>
+                </div>
+                <div class="content-card p-4">
+                    <h2 class="text-lg font-semibold mb-2">Recurring Expenses</h2>
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                        <input id="recurring-name-input" type="text" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Name">
+                        <input id="recurring-amount-input" type="number" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Amount">
+                        <select id="recurring-category-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);"></select>
+                        <select id="recurring-frequency-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                    <button id="add-recurring-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Add Recurring</button>
+                    <div id="recurring-list" class="space-y-2 text-sm mt-2"></div>
+                </div>
+                <div class="content-card p-4">
+                    <h2 class="text-lg font-semibold mb-2">Backup & Settings</h2>
+                    <div class="grid grid-cols-2 gap-2 mb-2">
+                        <button id="export-data-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Export JSON</button>
+                        <button id="import-data-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Import JSON</button>
+                    </div>
+                    <input id="import-data-input" type="file" class="hidden" accept="application/json">
+                    <div class="grid grid-cols-2 gap-2">
+                        <select id="currency-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);">
+                            <option value="KHR">KHR</option>
+                            <option value="USD">USD</option>
+                        </select>
+                        <select id="locale-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);">
+                            <option value="km-KH">km-KH</option>
+                            <option value="en-US">en-US</option>
+                        </select>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm mt-2">
+                        <input id="delete-confirm-checkbox" type="checkbox" checked>
+                        <span>Require confirmation before delete</span>
+                    </label>
+                    <button id="save-settings-btn" class="w-full p-3 rounded-lg text-sm font-semibold mt-2" style="background-color: var(--button-color); color: var(--button-text-color);">Save Settings</button>
+                </div>
+             </section>
         </main>
 
         <div id="fab" class="fab">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
         </div>
+
+        <nav class="bottom-nav">
+            <button class="bottom-nav-btn active" data-section="dashboard"><span>🏠</span><span>Home</span></button>
+            <button class="bottom-nav-btn" data-section="transactions"><span>🧾</span><span>Transactions</span></button>
+            <button class="bottom-nav-btn" data-section="analytics"><span>📈</span><span>Analytics</span></button>
+            <button class="bottom-nav-btn" data-section="manage"><span>⚙️</span><span>Manage</span></button>
+        </nav>
     </div>
 
     <!-- Expense Modal -->
@@ -304,11 +446,12 @@
             const STORAGE_WARNING_THRESHOLD = 0.8;
             const MIN_STORAGE_BAR_PERCENT = 2;
             const LOCAL_STORAGE_KEY = 'yi_spending_tracker_expenses';
+            const AUX_STORAGE_KEY = 'yi_spending_tracker_aux_data';
 
             const state = {
                 expenses: [],
                 filteredExpenses: [],
-                categories: [
+                defaultCategories: [
                     { id: 'food', name: 'អាហារ', icon: '🍔', color: '#FF6384' },
                     { id: 'transport', name: 'ការធ្វើដំណើរ', icon: '🛵', color: '#36A2EB' },
                     { id: 'bills', name: 'វិក្កយបត្រ', icon: '🧾', color: '#FFCE56' },
@@ -316,11 +459,18 @@
                     { id: 'entertainment', name: 'ការកម្សាន្ត', icon: '🎬', color: '#9966FF' },
                     { id: 'other', name: 'ផ្សេងៗ', icon: '💸', color: '#C9CBCF' },
                 ],
+                customCategories: [],
+                recurringItems: [],
+                budget: { monthly: 0 },
+                savingsGoal: { target: 0, saved: 0 },
+                settings: { currency: 'KHR', locale: 'km-KH', requireDeleteConfirm: true },
                 chartInstance: null,
                 storageMode: 'unknown',
                 ui: {
                     search: '',
                     periodFilter: 'all',
+                    sortBy: 'date_desc',
+                    activeSection: 'dashboard',
                 },
             };
             
@@ -341,6 +491,43 @@
             const filterChips = document.querySelectorAll('[data-period-filter]');
             const fab = document.getElementById('fab');
             const generateReportBtn = document.getElementById('generate-report');
+            const sortSelect = document.getElementById('sort-select');
+            const navButtons = document.querySelectorAll('.bottom-nav-btn');
+            const sectionDashboard = document.getElementById('section-dashboard');
+            const sectionTransactions = document.getElementById('section-transactions');
+            const sectionAnalytics = document.getElementById('section-analytics');
+            const sectionManage = document.getElementById('section-manage');
+            const budgetInput = document.getElementById('budget-input');
+            const saveBudgetBtn = document.getElementById('save-budget-btn');
+            const savingsTargetInput = document.getElementById('savings-target-input');
+            const savingsCurrentInput = document.getElementById('savings-current-input');
+            const saveSavingsBtn = document.getElementById('save-savings-btn');
+            const budgetStatusText = document.getElementById('budget-status-text');
+            const savingsStatusText = document.getElementById('savings-status-text');
+            const analyticsTotalTransactions = document.getElementById('analytics-total-transactions');
+            const analyticsAvgTransaction = document.getElementById('analytics-avg-transaction');
+            const analyticsTopCategory = document.getElementById('analytics-top-category');
+            const analyticsLargestExpense = document.getElementById('analytics-largest-expense');
+            const clearFiltersBtn = document.getElementById('clear-filters-btn');
+            const resetMonthBtn = document.getElementById('reset-month-btn');
+            const applyRecurringBtn = document.getElementById('apply-recurring-btn');
+            const checkStorageBtn2 = document.getElementById('check-storage-btn-2');
+            const categoryNameInput = document.getElementById('category-name-input');
+            const addCategoryBtn = document.getElementById('add-category-btn');
+            const customCategoriesList = document.getElementById('custom-categories-list');
+            const recurringNameInput = document.getElementById('recurring-name-input');
+            const recurringAmountInput = document.getElementById('recurring-amount-input');
+            const recurringCategorySelect = document.getElementById('recurring-category-select');
+            const recurringFrequencySelect = document.getElementById('recurring-frequency-select');
+            const addRecurringBtn = document.getElementById('add-recurring-btn');
+            const recurringList = document.getElementById('recurring-list');
+            const exportDataBtn = document.getElementById('export-data-btn');
+            const importDataBtn = document.getElementById('import-data-btn');
+            const importDataInput = document.getElementById('import-data-input');
+            const currencySelect = document.getElementById('currency-select');
+            const localeSelect = document.getElementById('locale-select');
+            const deleteConfirmCheckbox = document.getElementById('delete-confirm-checkbox');
+            const saveSettingsBtn = document.getElementById('save-settings-btn');
 
             // Modal Elements
             const modalOverlay = document.getElementById('modal-overlay');
@@ -377,7 +564,10 @@
                 tg.setHeaderColor(themeParams.bg_color || '#ffffff');
             }
             
-            const formatCurrency = (amount) => new Intl.NumberFormat('km-KH', { style: 'currency', currency: 'KHR', minimumFractionDigits: 0 }).format(amount);
+            const formatCurrency = (amount) => new Intl.NumberFormat(
+                state.settings.locale || 'km-KH',
+                { style: 'currency', currency: state.settings.currency || 'KHR', minimumFractionDigits: 0, maximumFractionDigits: 0 }
+            ).format(amount);
             const formatStorage = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
             const safeAlert = (message) => (tg.showAlert ? tg.showAlert(message) : alert(message));
             const isCloudAvailable = () => isStorageSupported && tg.CloudStorage && typeof tg.CloudStorage.getItems === 'function' && typeof tg.CloudStorage.setItem === 'function';
@@ -387,6 +577,18 @@
             const safeLocalStorageSet = (value) => {
                 try { localStorage.setItem(LOCAL_STORAGE_KEY, value); return true; } catch (e) { return false; }
             };
+            const safeLocalAuxGet = () => {
+                try { return localStorage.getItem(AUX_STORAGE_KEY); } catch (e) { return null; }
+            };
+            const safeLocalAuxSet = (value) => {
+                try { localStorage.setItem(AUX_STORAGE_KEY, value); return true; } catch (e) { return false; }
+            };
+            const parseJson = (raw, fallback) => {
+                if (!raw) return fallback;
+                try { return JSON.parse(raw); } catch (e) { return fallback; }
+            };
+            const getAllCategories = () => [...state.defaultCategories, ...state.customCategories];
+            const randomColor = () => `hsl(${Math.floor(Math.random() * 360)} 70% 60%)`;
 
             function render() {
                 state.filteredExpenses = getFilteredExpenses();
@@ -394,6 +596,11 @@
                 renderExpenseHistory();
                 renderCategoriesInDropdown();
                 renderChart();
+                renderAnalytics();
+                renderBudgetAndSavings();
+                renderCustomCategories();
+                renderRecurring();
+                renderSettings();
                 updateStorageUsageUI();
             }
 
@@ -401,9 +608,9 @@
                 const keyword = state.ui.search.trim().toLowerCase();
                 const todayStr = new Date().toISOString().slice(0, 10);
                 const monthPrefix = todayStr.slice(0, 7);
-                return state.expenses.filter(expense => {
+                const filtered = state.expenses.filter(expense => {
                     const noteText = (expense.notes || '').toLowerCase();
-                    const category = state.categories.find(c => c.id === expense.category);
+                    const category = getAllCategories().find(c => c.id === expense.category);
                     const categoryName = (category?.name || '').toLowerCase();
                     const matchesKeyword = !keyword || noteText.includes(keyword) || categoryName.includes(keyword);
                     const dateOnly = expense.date.slice(0, 10);
@@ -412,6 +619,13 @@
                         || (state.ui.periodFilter === 'month' && dateOnly.startsWith(monthPrefix));
                     return matchesKeyword && matchesPeriod;
                 });
+                const sorters = {
+                    date_desc: (a, b) => new Date(b.date) - new Date(a.date),
+                    date_asc: (a, b) => new Date(a.date) - new Date(b.date),
+                    amount_desc: (a, b) => b.amount - a.amount,
+                    amount_asc: (a, b) => a.amount - b.amount,
+                };
+                return filtered.sort(sorters[state.ui.sortBy] || sorters.date_desc);
             }
 
             function renderSummaries() {
@@ -434,7 +648,7 @@
                 const now = new Date();
                 const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
                 const monthlyExpenses = state.expenses.filter(e => new Date(e.date) >= startOfMonth);
-                const categoryTotals = state.categories.map(cat => ({
+                const categoryTotals = getAllCategories().map(cat => ({
                     ...cat,
                     total: monthlyExpenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0)
                 })).filter(cat => cat.total > 0);
@@ -453,11 +667,11 @@
             }
 
             function renderExpenseHistory() {
-                mainContent.querySelector('#history-placeholder')?.remove();
-                mainContent.querySelectorAll('.date-header, .content-card.expense-list-container').forEach(el => el.remove());
+                sectionTransactions.querySelector('#history-placeholder')?.remove();
+                sectionTransactions.querySelectorAll('.date-header, .content-card.expense-list-container').forEach(el => el.remove());
                 
                 if (state.filteredExpenses.length === 0) {
-                    mainContent.insertAdjacentElement('beforeend', historyPlaceholder);
+                    sectionTransactions.insertAdjacentElement('beforeend', historyPlaceholder);
                     return;
                 }
 
@@ -472,17 +686,17 @@
                 const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
                 sortedDates.forEach(dateStr => {
-                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString('km-KH', { day: 'numeric', month: 'long', year: 'numeric' });
+                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString(state.settings.locale || 'km-KH', { day: 'numeric', month: 'long', year: 'numeric' });
                     
                     const dateHeader = document.createElement('h2');
                     dateHeader.className = 'date-header text-lg'; dateHeader.textContent = label;
-                    mainContent.appendChild(dateHeader);
+                    sectionTransactions.appendChild(dateHeader);
 
                     const listContainer = document.createElement('div');
                     listContainer.className = 'content-card expense-list-container';
                     
                     grouped[dateStr].sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(expense => {
-                        const category = state.categories.find(c => c.id === expense.category);
+                        const category = getAllCategories().find(c => c.id === expense.category);
                         const item = document.createElement('div');
                         item.className = 'list-item'; item.dataset.id = expense.id;
                         item.innerHTML = `
@@ -494,15 +708,128 @@
                             <div class="font-semibold text-right">${formatCurrency(expense.amount)}</div>`;
                         listContainer.appendChild(item);
                     });
-                    mainContent.appendChild(listContainer);
+                    sectionTransactions.appendChild(listContainer);
                 });
             }
             
             function renderCategoriesInDropdown() {
                 categorySelect.innerHTML = '<option value="" disabled>-- ជ្រើសរើសប្រភេទ --</option>';
-                state.categories.forEach(cat => {
+                recurringCategorySelect.innerHTML = '<option value="" disabled selected>Choose category</option>';
+                getAllCategories().forEach(cat => {
                     categorySelect.innerHTML += `<option value="${cat.id}">${cat.icon} ${cat.name}</option>`;
+                    recurringCategorySelect.innerHTML += `<option value="${cat.id}">${cat.icon} ${cat.name}</option>`;
                 });
+            }
+
+            function renderAnalytics() {
+                const total = state.expenses.length;
+                const totalAmount = state.expenses.reduce((s, e) => s + e.amount, 0);
+                const avg = total ? totalAmount / total : 0;
+                const largest = state.expenses.reduce((m, e) => Math.max(m, e.amount), 0);
+                const top = getAllCategories().map(cat => ({
+                    ...cat,
+                    total: state.expenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0)
+                })).sort((a, b) => b.total - a.total)[0];
+                analyticsTotalTransactions.textContent = `${total}`;
+                analyticsAvgTransaction.textContent = formatCurrency(avg);
+                analyticsLargestExpense.textContent = formatCurrency(largest);
+                analyticsTopCategory.textContent = top?.total ? `${top.icon} ${top.name}` : '-';
+            }
+
+            function renderBudgetAndSavings() {
+                const now = new Date();
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const spentThisMonth = state.expenses.filter(e => new Date(e.date) >= startOfMonth).reduce((s, e) => s + e.amount, 0);
+                const monthlyBudget = Number(state.budget.monthly || 0);
+                const remaining = monthlyBudget - spentThisMonth;
+                budgetStatusText.textContent = monthlyBudget > 0
+                    ? `Budget: ${formatCurrency(monthlyBudget)} | Spent: ${formatCurrency(spentThisMonth)} | Remaining: ${formatCurrency(remaining)}`
+                    : `Budget not set yet. Spent this month: ${formatCurrency(spentThisMonth)}`;
+                const target = Number(state.savingsGoal.target || 0);
+                const saved = Number(state.savingsGoal.saved || 0);
+                const progress = target > 0 ? Math.min((saved / target) * 100, 100).toFixed(1) : 0;
+                savingsStatusText.textContent = target > 0
+                    ? `Goal: ${formatCurrency(target)} | Saved: ${formatCurrency(saved)} (${progress}%)`
+                    : 'Savings goal not set yet.';
+            }
+
+            function renderCustomCategories() {
+                customCategoriesList.innerHTML = '';
+                if (state.customCategories.length === 0) {
+                    customCategoriesList.innerHTML = `<p style="color: var(--hint-color);">No custom categories yet.</p>`;
+                    return;
+                }
+                state.customCategories.forEach(cat => {
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center justify-between p-2 rounded-lg';
+                    row.style.backgroundColor = 'var(--bg-color)';
+                    row.innerHTML = `<span>${cat.icon} ${cat.name}</span><button data-remove-category-id="${cat.id}" class="text-sm" style="color: var(--danger-color);">Remove</button>`;
+                    customCategoriesList.appendChild(row);
+                });
+            }
+
+            function renderRecurring() {
+                recurringList.innerHTML = '';
+                if (state.recurringItems.length === 0) {
+                    recurringList.innerHTML = `<p style="color: var(--hint-color);">No recurring items yet.</p>`;
+                    return;
+                }
+                state.recurringItems.forEach(item => {
+                    const category = getAllCategories().find(c => c.id === item.category);
+                    const row = document.createElement('div');
+                    row.className = 'flex items-center justify-between p-2 rounded-lg';
+                    row.style.backgroundColor = 'var(--bg-color)';
+                    row.innerHTML = `
+                        <div>
+                            <p class="font-semibold">${item.name}</p>
+                            <p style="color: var(--hint-color);">${formatCurrency(item.amount)} • ${item.frequency} • ${category?.name || 'Unknown'}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button data-run-recurring-id="${item.id}" class="text-xs px-2 py-1 rounded" style="background-color: var(--button-color); color: var(--button-text-color);">Run</button>
+                            <button data-remove-recurring-id="${item.id}" class="text-xs px-2 py-1 rounded" style="background-color: var(--danger-color); color: var(--button-text-color);">Del</button>
+                        </div>`;
+                    recurringList.appendChild(row);
+                });
+            }
+
+            function renderSettings() {
+                budgetInput.value = state.budget.monthly || '';
+                savingsTargetInput.value = state.savingsGoal.target || '';
+                savingsCurrentInput.value = state.savingsGoal.saved || '';
+                currencySelect.value = state.settings.currency || 'KHR';
+                localeSelect.value = state.settings.locale || 'km-KH';
+                deleteConfirmCheckbox.checked = state.settings.requireDeleteConfirm !== false;
+                sortSelect.value = state.ui.sortBy;
+            }
+
+            function setActiveSection(sectionName) {
+                state.ui.activeSection = sectionName;
+                sectionDashboard.classList.toggle('hidden', sectionName !== 'dashboard');
+                sectionTransactions.classList.toggle('hidden', sectionName !== 'transactions');
+                sectionAnalytics.classList.toggle('hidden', sectionName !== 'analytics');
+                sectionManage.classList.toggle('hidden', sectionName !== 'manage');
+                navButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.section === sectionName));
+                const showFab = sectionName === 'dashboard' || sectionName === 'transactions';
+                fab.style.opacity = showFab ? '1' : '0';
+                fab.style.pointerEvents = showFab ? 'auto' : 'none';
+            }
+
+            function getAuxDataPayload() {
+                return JSON.stringify({
+                    customCategories: state.customCategories,
+                    recurringItems: state.recurringItems,
+                    budget: state.budget,
+                    savingsGoal: state.savingsGoal,
+                    settings: state.settings,
+                });
+            }
+
+            function saveAuxData() {
+                const payload = getAuxDataPayload();
+                safeLocalAuxSet(payload);
+                if (isCloudAvailable()) {
+                    tg.CloudStorage.setItem('auxData', payload, () => {});
+                }
             }
 
             function updateStorageUsageUI(notify = false, usedBytes = null) {
@@ -605,12 +932,12 @@
                     case 'month':
                         startDate = new Date(now.getFullYear(), now.getMonth(), 1);
                         endDate = new Date(now.setHours(23, 59, 59, 999));
-                        periodLabel = now.toLocaleDateString('km-KH', {month: 'long', year: 'numeric'});
+                        periodLabel = now.toLocaleDateString(state.settings.locale || 'km-KH', {month: 'long', year: 'numeric'});
                         break;
                     case 'last-month':
                         startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
                         endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-                        periodLabel = startDate.toLocaleDateString('km-KH', {month: 'long', year: 'numeric'});
+                        periodLabel = startDate.toLocaleDateString(state.settings.locale || 'km-KH', {month: 'long', year: 'numeric'});
                         break;
                     case 'all':
                         startDate = new Date(0);
@@ -654,7 +981,7 @@
                 const avgPerDay = totalAmount / daysDiff;
                 const avgPerTransaction = totalAmount / transactionCount;
                 
-                const categoryTotals = state.categories.map(cat => ({
+                const categoryTotals = getAllCategories().map(cat => ({
                     ...cat,
                     total: filteredExpenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0),
                     count: filteredExpenses.filter(e => e.category === cat.id).length
@@ -664,8 +991,8 @@
                 const sortedExpenses = [...filteredExpenses].sort((a, b) => b.amount - a.amount);
                 const highestExpense = sortedExpenses[0];
                 const lowestExpense = sortedExpenses[sortedExpenses.length - 1];
-                const highestCategory = state.categories.find(c => c.id === highestExpense.category);
-                const lowestCategory = state.categories.find(c => c.id === lowestExpense.category);
+                const highestCategory = getAllCategories().find(c => c.id === highestExpense.category);
+                const lowestCategory = getAllCategories().find(c => c.id === lowestExpense.category);
 
                 let report = `📊 របាយការណ៍ចំណាយ - ${periodLabel}\n`;
                 report += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
@@ -753,12 +1080,200 @@
             }
             
             function deleteExpense(id) {
+                const proceed = () => {
+                    state.expenses = state.expenses.filter(e => e.id !== id);
+                    saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
+                };
+                if (state.settings.requireDeleteConfirm === false) {
+                    proceed();
+                    return;
+                }
                 tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
-                    if (confirmed) {
-                        state.expenses = state.expenses.filter(e => e.id !== id);
-                        saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
-                    }
+                    if (confirmed) proceed();
                 });
+            }
+
+            function duplicateExpense(id) {
+                const source = state.expenses.find(e => e.id === id);
+                if (!source) return;
+                state.expenses.push({
+                    id: self.crypto.randomUUID(),
+                    amount: source.amount,
+                    category: source.category,
+                    notes: source.notes ? `${source.notes} (copy)` : 'Copied expense',
+                    date: new Date().toISOString()
+                });
+                saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
+            }
+
+            function isRecurringDue(item) {
+                if (!item.lastAppliedDate) return true;
+                const last = new Date(item.lastAppliedDate);
+                const now = new Date();
+                if (item.frequency === 'daily') return now.toDateString() !== last.toDateString();
+                if (item.frequency === 'weekly') return now - last >= 7 * 24 * 60 * 60 * 1000;
+                if (item.frequency === 'monthly') return now.getMonth() !== last.getMonth() || now.getFullYear() !== last.getFullYear();
+                return false;
+            }
+
+            function runRecurringItem(itemId) {
+                const item = state.recurringItems.find(r => r.id === itemId);
+                if (!item) return;
+                state.expenses.push({
+                    id: self.crypto.randomUUID(),
+                    amount: Number(item.amount),
+                    category: item.category,
+                    notes: `[Recurring] ${item.name}`,
+                    date: new Date().toISOString()
+                });
+                item.lastAppliedDate = new Date().toISOString();
+                saveAuxData();
+                saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
+            }
+
+            function applyDueRecurringItems() {
+                const dueItems = state.recurringItems.filter(isRecurringDue);
+                if (dueItems.length === 0) {
+                    safeAlert('No recurring expenses are due right now.');
+                    return;
+                }
+                dueItems.forEach(item => {
+                    state.expenses.push({
+                        id: self.crypto.randomUUID(),
+                        amount: Number(item.amount),
+                        category: item.category,
+                        notes: `[Recurring] ${item.name}`,
+                        date: new Date().toISOString()
+                    });
+                    item.lastAppliedDate = new Date().toISOString();
+                });
+                saveAuxData();
+                saveDataToCloud(() => { render(); safeAlert(`Added ${dueItems.length} recurring expense(s).`); });
+            }
+
+            function addCustomCategory() {
+                const name = categoryNameInput.value.trim();
+                if (!name) {
+                    safeAlert('Please input category name.');
+                    return;
+                }
+                const id = `custom_${name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`;
+                state.customCategories.push({ id, name, icon: '🏷️', color: randomColor() });
+                categoryNameInput.value = '';
+                saveAuxData();
+                render();
+            }
+
+            function removeCustomCategory(categoryId) {
+                state.customCategories = state.customCategories.filter(c => c.id !== categoryId);
+                state.expenses = state.expenses.map(exp => exp.category === categoryId ? { ...exp, category: 'other' } : exp);
+                saveAuxData();
+                saveDataToCloud(() => render());
+            }
+
+            function addRecurringItem() {
+                const name = recurringNameInput.value.trim();
+                const amount = parseFloat(recurringAmountInput.value);
+                const category = recurringCategorySelect.value;
+                const frequency = recurringFrequencySelect.value;
+                if (!name || isNaN(amount) || amount <= 0 || !category || !frequency) {
+                    safeAlert('Please fill recurring expense fields.');
+                    return;
+                }
+                state.recurringItems.push({
+                    id: self.crypto.randomUUID(),
+                    name,
+                    amount,
+                    category,
+                    frequency,
+                    lastAppliedDate: null
+                });
+                recurringNameInput.value = '';
+                recurringAmountInput.value = '';
+                recurringCategorySelect.value = '';
+                saveAuxData();
+                render();
+            }
+
+            function removeRecurringItem(itemId) {
+                state.recurringItems = state.recurringItems.filter(r => r.id !== itemId);
+                saveAuxData();
+                render();
+            }
+
+            function clearFilters() {
+                state.ui.search = '';
+                state.ui.periodFilter = 'all';
+                state.ui.sortBy = 'date_desc';
+                searchInput.value = '';
+                sortSelect.value = 'date_desc';
+                filterChips.forEach(btn => btn.classList.toggle('active', btn.dataset.periodFilter === 'all'));
+                render();
+            }
+
+            function resetThisMonthData() {
+                tg.showConfirm('Reset all expenses in this month?', (ok) => {
+                    if (!ok) return;
+                    const monthPrefix = new Date().toISOString().slice(0, 7);
+                    state.expenses = state.expenses.filter(e => !e.date.startsWith(monthPrefix));
+                    saveDataToCloud(() => render());
+                });
+            }
+
+            function saveBudgetAndSavings() {
+                state.budget.monthly = Number(budgetInput.value || 0);
+                state.savingsGoal.target = Number(savingsTargetInput.value || 0);
+                state.savingsGoal.saved = Number(savingsCurrentInput.value || 0);
+                saveAuxData();
+                render();
+            }
+
+            function saveSettings() {
+                state.settings.currency = currencySelect.value || 'KHR';
+                state.settings.locale = localeSelect.value || 'km-KH';
+                state.settings.requireDeleteConfirm = deleteConfirmCheckbox.checked;
+                saveAuxData();
+                render();
+            }
+
+            function exportData() {
+                const payload = {
+                    exportedAt: new Date().toISOString(),
+                    expenses: state.expenses,
+                    customCategories: state.customCategories,
+                    recurringItems: state.recurringItems,
+                    budget: state.budget,
+                    savingsGoal: state.savingsGoal,
+                    settings: state.settings
+                };
+                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `yi-spending-backup-${new Date().toISOString().slice(0, 10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+
+            function importDataFromFile(file) {
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const parsed = JSON.parse(reader.result);
+                        state.expenses = Array.isArray(parsed.expenses) ? parsed.expenses : [];
+                        state.customCategories = Array.isArray(parsed.customCategories) ? parsed.customCategories : [];
+                        state.recurringItems = Array.isArray(parsed.recurringItems) ? parsed.recurringItems : [];
+                        state.budget = parsed.budget || { monthly: 0 };
+                        state.savingsGoal = parsed.savingsGoal || { target: 0, saved: 0 };
+                        state.settings = { ...state.settings, ...(parsed.settings || {}) };
+                        saveAuxData();
+                        saveDataToCloud(() => { render(); safeAlert('Import successful.'); });
+                    } catch (e) {
+                        safeAlert('Invalid JSON backup file.');
+                    }
+                };
+                reader.readAsText(file);
             }
 
             function saveDataToCloud(callback) {
@@ -805,15 +1320,15 @@
 
                 if (!isCloudAvailable()) {
                     state.storageMode = 'local';
-                    loadExpenses(safeLocalStorageGet());
+                    loadExpenses(safeLocalStorageGet(), safeLocalAuxGet());
                     safeAlert('Telegram កំណែរបស់អ្នកចាស់ពេក ឬ Cloud Storage មិនអាចប្រើបាន។ កម្មវិធីនឹងប្រើ Local Storage។');
                     return;
                 }
 
-                tg.CloudStorage.getItems(['expenses', 'termsAccepted'], (error, values) => {
+                tg.CloudStorage.getItems(['expenses', 'termsAccepted', 'auxData'], (error, values) => {
                     if (error) { 
                         state.storageMode = 'local';
-                        loadExpenses(safeLocalStorageGet());
+                        loadExpenses(safeLocalStorageGet(), safeLocalAuxGet());
                         safeAlert(`Error loading cloud data: ${error}. Switched to local backup.`); 
                         return; 
                     }
@@ -821,17 +1336,19 @@
                     if (!values.termsAccepted) {
                         tg.showConfirm(
                             "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទុកទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាពនៅក្នុង Telegram Cloud Storage និងមាន Local Backup។ តើអ្នកយល់ព្រមទេ?",
-                            (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => loadExpenses(values.expenses)) : tg.close()
+                            (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => loadExpenses(values.expenses, values.auxData)) : tg.close()
                         );
                     } else { 
-                        loadExpenses(values.expenses); 
+                        loadExpenses(values.expenses, values.auxData); 
                     }
                 });
             }
             
-            function loadExpenses(storedValue) {
+            function loadExpenses(storedValue, auxStoredValue) {
                  const localValue = safeLocalStorageGet();
+                 const localAuxValue = safeLocalAuxGet();
                  const preferredValue = storedValue ?? localValue;
+                 const preferredAuxValue = auxStoredValue ?? localAuxValue;
                  if (preferredValue) {
                     try {
                         const parsed = JSON.parse(preferredValue);
@@ -840,6 +1357,12 @@
                         state.expenses = [];
                     }
                  }
+                 const auxParsed = parseJson(preferredAuxValue, {});
+                 state.customCategories = Array.isArray(auxParsed.customCategories) ? auxParsed.customCategories : [];
+                 state.recurringItems = Array.isArray(auxParsed.recurringItems) ? auxParsed.recurringItems : [];
+                 state.budget = auxParsed.budget || { monthly: 0 };
+                 state.savingsGoal = auxParsed.savingsGoal || { target: 0, saved: 0 };
+                 state.settings = { ...state.settings, ...(auxParsed.settings || {}) };
                  state.storageMode = isCloudAvailable() ? 'cloud' : 'local';
                  const serializedExpenses = JSON.stringify(state.expenses);
                  if (storedValue !== null && storedValue !== undefined) {
@@ -847,7 +1370,9 @@
                  } else if (!localValue && state.expenses.length > 0) {
                     safeLocalStorageSet(serializedExpenses);
                  }
+                 safeLocalAuxSet(getAuxDataPayload());
                  render();
+                 setActiveSection('dashboard');
             }
 
             // --- Event Listeners & Final Setup ---
@@ -859,6 +1384,7 @@
             fab.addEventListener('click', () => openModal());
             modalOverlay.addEventListener('click', closeModal);
             reportModalOverlay.addEventListener('click', closeReportModalFunc);
+            navButtons.forEach(btn => btn.addEventListener('click', () => setActiveSection(btn.dataset.section)));
 
             mainContent.addEventListener('click', (e) => {
                 const item = e.target.closest('.list-item');
@@ -866,19 +1392,42 @@
                     const expense = state.expenses.find(ex => ex.id === item.dataset.id);
                     if (expense) {
                         tg.showPopup({ title: 'ជ្រើសរើសសកម្មភាព', message: `ចំណាយលើ "${expense.notes || 'គ្មានកំណត់ចំណាំ'}"`,
-                            buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ]
+                            buttons: [ {id: 'edit', type: 'default', text: 'កែសម្រួល'}, {id: 'duplicate', type: 'default', text: 'ចម្លង'}, {id: 'delete', type: 'destructive', text: 'លុប'}, {type: 'cancel'} ]
                         }, (buttonId) => {
                             if (buttonId === 'edit') { openModal(expense); }
+                            else if (buttonId === 'duplicate') { duplicateExpense(expense.id); }
                             else if (buttonId === 'delete') { deleteExpense(expense.id); }
                         });
                     }
                 }
+                const removeCategoryBtn = e.target.closest('[data-remove-category-id]');
+                if (removeCategoryBtn) removeCustomCategory(removeCategoryBtn.dataset.removeCategoryId);
+                const runRecurringBtn = e.target.closest('[data-run-recurring-id]');
+                if (runRecurringBtn) runRecurringItem(runRecurringBtn.dataset.runRecurringId);
+                const removeRecurringBtn = e.target.closest('[data-remove-recurring-id]');
+                if (removeRecurringBtn) removeRecurringItem(removeRecurringBtn.dataset.removeRecurringId);
             });
 
             generateReportBtn.addEventListener('click', openReportModal);
             generateReportConfirm.addEventListener('click', generateDetailedReport);
             closeReportModal.addEventListener('click', closeReportModalFunc);
             checkStorageBtn.addEventListener('click', () => updateStorageUsageUI(true));
+            checkStorageBtn2.addEventListener('click', () => updateStorageUsageUI(true));
+            addCategoryBtn.addEventListener('click', addCustomCategory);
+            addRecurringBtn.addEventListener('click', addRecurringItem);
+            applyRecurringBtn.addEventListener('click', applyDueRecurringItems);
+            clearFiltersBtn.addEventListener('click', clearFilters);
+            resetMonthBtn.addEventListener('click', resetThisMonthData);
+            saveBudgetBtn.addEventListener('click', saveBudgetAndSavings);
+            saveSavingsBtn.addEventListener('click', saveBudgetAndSavings);
+            exportDataBtn.addEventListener('click', exportData);
+            importDataBtn.addEventListener('click', () => importDataInput.click());
+            importDataInput.addEventListener('change', (e) => importDataFromFile(e.target.files?.[0]));
+            saveSettingsBtn.addEventListener('click', saveSettings);
+            sortSelect.addEventListener('change', (e) => {
+                state.ui.sortBy = e.target.value;
+                render();
+            });
             searchInput.addEventListener('input', (e) => {
                 state.ui.search = e.target.value;
                 render();
