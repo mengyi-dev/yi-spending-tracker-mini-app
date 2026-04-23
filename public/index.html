@@ -217,7 +217,7 @@
                         <p id="storage-mode-text" class="text-sm" style="color: var(--hint-color);">Checking...</p>
                     </div>
                     <button id="check-storage-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">
-                        Check
+                        ពិនិត្យ
                     </button>
                 </div>
                 <div class="mt-3 storage-bar-track">
@@ -299,7 +299,7 @@
         function initializeApp() {
             const tg = window.Telegram.WebApp;
             const isStorageSupported = tg.isVersionAtLeast('6.9');
-            // Soft cap for warning/fallback to avoid frequent CloudStorage write failures near practical limits.
+            // Conservative soft cap (32KB) used to warn early and switch safely before CloudStorage write errors.
             const CLOUD_SOFT_LIMIT_BYTES = 32 * 1024;
             const STORAGE_WARNING_THRESHOLD = 0.8;
             const MIN_STORAGE_BAR_PERCENT = 2;
@@ -831,7 +831,7 @@
             
             function loadExpenses(storedValue) {
                  const localValue = safeLocalStorageGet();
-                 const preferredValue = (storedValue !== null && storedValue !== undefined) ? storedValue : localValue;
+                 const preferredValue = storedValue ?? localValue;
                  if (preferredValue) {
                     try {
                         const parsed = JSON.parse(preferredValue);
@@ -841,10 +841,11 @@
                     }
                  }
                  state.storageMode = isCloudAvailable() ? 'cloud' : 'local';
+                 const serializedExpenses = JSON.stringify(state.expenses);
                  if (storedValue !== null && storedValue !== undefined) {
-                    safeLocalStorageSet(JSON.stringify(state.expenses));
+                    safeLocalStorageSet(serializedExpenses);
                  } else if (!localValue && state.expenses.length > 0) {
-                    safeLocalStorageSet(JSON.stringify(state.expenses));
+                    safeLocalStorageSet(serializedExpenses);
                  }
                  render();
             }
