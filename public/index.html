@@ -269,15 +269,14 @@
 
                 <div class="content-card p-4 mt-4">
                     <h2 class="text-lg font-semibold mb-3">Budget & Goals</h2>
-                    <div class="grid grid-cols-2 gap-2 mb-3">
+                    <div class="mb-3">
                         <input id="budget-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Monthly budget">
-                        <button id="save-budget-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save Budget</button>
                     </div>
                     <div class="grid grid-cols-2 gap-2 mb-3">
                         <input id="savings-target-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Savings target">
                         <input id="savings-current-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Already saved">
                     </div>
-                    <button id="save-savings-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save Goal</button>
+                    <button id="save-budget-goals-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save Budget & Goals</button>
                     <div class="mt-3 text-sm" style="color: var(--hint-color);">
                         <p id="budget-status-text">Budget status: -</p>
                         <p id="savings-status-text">Savings progress: -</p>
@@ -407,6 +406,10 @@
             </div>
             <input type="text" id="notes-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" placeholder="កំណត់ចំណាំ (បើមាន)">
             <input type="hidden" id="expense-id-input">
+            <div class="grid grid-cols-2 gap-2">
+                <button type="button" id="cancel-expense-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--secondary-bg-color); color: var(--text-color); border: 1px solid var(--bg-color);">Cancel</button>
+                <button type="submit" id="save-expense-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save</button>
+            </div>
         </form>
     </div>
 
@@ -499,10 +502,9 @@
             const sectionAnalytics = document.getElementById('section-analytics');
             const sectionManage = document.getElementById('section-manage');
             const budgetInput = document.getElementById('budget-input');
-            const saveBudgetBtn = document.getElementById('save-budget-btn');
+            const saveBudgetGoalsBtn = document.getElementById('save-budget-goals-btn');
             const savingsTargetInput = document.getElementById('savings-target-input');
             const savingsCurrentInput = document.getElementById('savings-current-input');
-            const saveSavingsBtn = document.getElementById('save-savings-btn');
             const budgetStatusText = document.getElementById('budget-status-text');
             const savingsStatusText = document.getElementById('savings-status-text');
             const analyticsTotalTransactions = document.getElementById('analytics-total-transactions');
@@ -540,6 +542,8 @@
             const dateInput = document.getElementById('date-input');
             const notesInput = document.getElementById('notes-input');
             const expenseIdInput = document.getElementById('expense-id-input');
+            const cancelExpenseBtn = document.getElementById('cancel-expense-btn');
+            const saveExpenseBtn = document.getElementById('save-expense-btn');
 
             // Report Modal Elements
             const reportModalOverlay = document.getElementById('report-modal-overlay');
@@ -813,8 +817,9 @@
                 localeSelect.value = state.settings.locale || 'km-KH';
                 deleteConfirmCheckbox.checked = state.settings.requireDeleteConfirm !== false;
                 sortSelect.value = state.ui.sortBy;
-                saveBudgetBtn.textContent = t('រក្សាទុកថវិកា', 'Save Budget');
-                saveSavingsBtn.textContent = t('រក្សាទុកគោលដៅ', 'Save Goal');
+                saveBudgetGoalsBtn.textContent = t('រក្សាទុកថវិកា និងគោលដៅ', 'Save Budget & Goals');
+                saveExpenseBtn.textContent = t('រក្សាទុក', 'Save');
+                cancelExpenseBtn.textContent = t('បោះបង់', 'Cancel');
                 const navText = {
                     dashboard: t('ទំព័រដើម', 'Home'),
                     transactions: t('ប្រតិបត្តិការ', 'Transactions'),
@@ -1250,11 +1255,23 @@
             }
 
             function saveBudgetAndSavings() {
-                state.budget.monthly = Number(budgetInput.value || 0);
-                state.savingsGoal.target = Number(savingsTargetInput.value || 0);
-                state.savingsGoal.saved = Number(savingsCurrentInput.value || 0);
+                const monthlyBudget = Number(budgetInput.value || 0);
+                const savingsTarget = Number(savingsTargetInput.value || 0);
+                const savingsSaved = Number(savingsCurrentInput.value || 0);
+                if (!Number.isFinite(monthlyBudget) || !Number.isFinite(savingsTarget) || !Number.isFinite(savingsSaved)) {
+                    safeAlert(t('សូមបញ្ចូលតែលេខត្រឹមត្រូវ។', 'Please enter valid numbers only.'));
+                    return;
+                }
+                if (monthlyBudget < 0 || savingsTarget < 0 || savingsSaved < 0) {
+                    safeAlert(t('សូមកុំបញ្ចូលតម្លៃអវិជ្ជមាន។', 'Please avoid negative values.'));
+                    return;
+                }
+                state.budget.monthly = monthlyBudget;
+                state.savingsGoal.target = savingsTarget;
+                state.savingsGoal.saved = savingsSaved;
                 saveAuxData();
                 render();
+                safeAlert(t('បានរក្សាទុកថវិកា និងគោលដៅហើយ។', 'Budget and savings saved successfully.'));
             }
 
             function saveSettings() {
@@ -1263,6 +1280,7 @@
                 state.settings.requireDeleteConfirm = deleteConfirmCheckbox.checked;
                 saveAuxData();
                 render();
+                safeAlert(t('បានរក្សាទុកការកំណត់ហើយ។', 'Settings saved successfully.'));
             }
 
             function exportData() {
@@ -1442,6 +1460,11 @@
 
             fab.addEventListener('click', () => openModal());
             modalOverlay.addEventListener('click', closeModal);
+            cancelExpenseBtn.addEventListener('click', closeModal);
+            expenseForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                handleFormSubmit();
+            });
             reportModalOverlay.addEventListener('click', closeReportModalFunc);
             navButtons.forEach(btn => btn.addEventListener('click', () => setActiveSection(btn.dataset.section)));
 
@@ -1477,8 +1500,7 @@
             applyRecurringBtn.addEventListener('click', applyDueRecurringItems);
             clearFiltersBtn.addEventListener('click', clearFilters);
             resetMonthBtn.addEventListener('click', resetThisMonthData);
-            saveBudgetBtn.addEventListener('click', saveBudgetAndSavings);
-            saveSavingsBtn.addEventListener('click', saveBudgetAndSavings);
+            saveBudgetGoalsBtn.addEventListener('click', saveBudgetAndSavings);
             exportDataBtn.addEventListener('click', exportData);
             importDataBtn.addEventListener('click', () => importDataInput.click());
             importDataInput.addEventListener('change', (e) => importDataFromFile(e.target.files?.[0]));
