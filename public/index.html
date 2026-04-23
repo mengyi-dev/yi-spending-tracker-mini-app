@@ -541,7 +541,18 @@
     const showConfirm = (msg, cb) => typeof tg.showConfirm === 'function' ? tg.showConfirm(msg, cb) : cb(confirm(msg));
     const haptic = (type) => { try { tg.HapticFeedback?.impactOccurred?.(type); } catch(e){} };
     const hapticNotify = (type) => { try { tg.HapticFeedback?.notificationOccurred?.(type); } catch(e){} };
-    const isCloudOK = () => tg.isVersionAtLeast?.('6.9') && typeof tg.CloudStorage?.getItems === 'function' && typeof tg.CloudStorage?.setItem === 'function';
+
+    // Robust cloud check: test actual method existence on the CloudStorage object,
+    // never relying on isVersionAtLeast which may be absent in some clients.
+    const isCloudOK = () => {
+        const cs = tg.CloudStorage;
+        return !!(cs &&
+            typeof cs.setItem   === 'function' &&
+            typeof cs.getItem   === 'function' &&
+            typeof cs.getItems  === 'function' &&
+            typeof cs.removeItem === 'function'
+        );
+    };
 
     /* ── Theme ── */
     function applyTheme() {
@@ -559,7 +570,16 @@
     if (typeof tg.onEvent === 'function') tg.onEvent('themeChanged', applyTheme);
 
     /* ── Constants ── */
-    const CLOUD_LIMIT = 32 * 1024; // 32 KB soft cap
+    // Telegram CloudStorage real limits:
+    //   - Max value size per key: 4096 bytes (4 KB)
+    //   - Max keys per bot: 1024
+    // We chunk expenses across multiple keys to stay within per-key limit.
+    const CLOUD_KEY_LIMIT   = 4000;  // bytes per key (stay 96 bytes under 4096 for safety)
+    const CLOUD_CHUNK_PREFIX = 'exp_chunk_';
+    const CLOUD_META_KEY     = 'exp_meta';   // stores { chunks: N, total: N }
+    const CLOUD_AUX_KEY      = 'auxData';
+    const CLOUD_TERMS_KEY    = 'terms';
+    const DISPLAY_LIMIT      = 32 * 1024;    // for the UI bar only (32 KB soft visual cap)
     const LS_EXPENSES = 'yi_exp_v2';
     const LS_AUX = 'yi_aux_v2';
     const DEFAULT_CAT = 'other';
@@ -692,10 +712,91 @@
         });
     }
 
-    /* ── Persist ── */
+    /* ══════════════════════════════════════════════════════════
+       CLOUD STORAGE — CHUNKED READ/WRITE
+       Telegram limits each CloudStorage value to 4096 bytes.
+       We split the expenses JSON across multiple numbered keys:
+         exp_chunk_0, exp_chunk_1, exp_chunk_2 …
+       and store { chunks: N } in exp_meta so we know how many to read.
+    ══════════════════════════════════════════════════════════ */
+
+    // Split a string into chunks of at most maxBytes UTF-8 bytes.
+    function splitIntoChunks(str, maxBytes) {
+        const enc = new TextEncoder();
+        const chunks = [];
+        let start = 0;
+        while (start < str.length) {
+            // Binary-search the largest slice that fits in maxBytes bytes.
+            let lo = 1, hi = Math.min(str.length - start, maxBytes);
+            while (lo < hi) {
+                const mid = (lo + hi + 1) >> 1;
+                if (enc.encode(str.slice(start, start + mid)).length <= maxBytes) lo = mid;
+                else hi = mid - 1;
+            }
+            chunks.push(str.slice(start, start + lo));
+            start += lo;
+        }
+        return chunks.length ? chunks : [''];
+    }
+
+    // Write expenses to CloudStorage using chunked keys.
+    // callback(err) — err is null on success.
+    function cloudWriteExpenses(payload, callback) {
+        const cs = tg.CloudStorage;
+        const chunks = splitIntoChunks(payload, CLOUD_KEY_LIMIT);
+        const meta   = JSON.stringify({ chunks: chunks.length });
+        let pending  = chunks.length + 1; // +1 for meta key
+        let failed   = false;
+
+        const done = (err) => {
+            if (err && !failed) { failed = true; callback(err); return; }
+            pending--;
+            if (pending === 0 && !failed) callback(null);
+        };
+
+        // Write meta first (best-effort; if this fails we abort)
+        cs.setItem(CLOUD_META_KEY, meta, (err) => {
+            if (err) { callback(err); return; }
+            if (chunks.length === 0) { callback(null); return; }
+            chunks.forEach((chunk, i) => {
+                cs.setItem(`${CLOUD_CHUNK_PREFIX}${i}`, chunk, done);
+            });
+        });
+    }
+
+    // Read expenses from CloudStorage (reassembles chunks).
+    // callback(err, jsonString|null)
+    function cloudReadExpenses(callback) {
+        const cs = tg.CloudStorage;
+        cs.getItem(CLOUD_META_KEY, (err, metaStr) => {
+            // metaStr is "" if key doesn't exist (Telegram behaviour)
+            if (err || !metaStr) { callback(err || null, null); return; }
+            const meta = parseJ(metaStr, null);
+            if (!meta || !meta.chunks) { callback(null, null); return; }
+
+            const keys = Array.from({ length: meta.chunks }, (_, i) => `${CLOUD_CHUNK_PREFIX}${i}`);
+            cs.getItems(keys, (err2, vals) => {
+                if (err2 || !vals) { callback(err2 || null, null); return; }
+                const assembled = keys.map(k => vals[k] || '').join('');
+                callback(null, assembled || null);
+            });
+        });
+    }
+
+    // Delete all old chunk keys (used when chunk count shrinks after deletions).
+    function cloudCleanOldChunks(newCount, oldCount) {
+        if (!isCloudOK() || oldCount <= newCount) return;
+        for (let i = newCount; i < oldCount; i++) {
+            tg.CloudStorage.removeItem(`${CLOUD_CHUNK_PREFIX}${i}`, () => {});
+        }
+    }
+
+    /* ── Persist expenses ── */
+    let _prevChunkCount = 0; // track previous chunk count to clean stale keys
+
     function persistExpenses(cb) {
         const payload = JSON.stringify(state.expenses);
-        lsSet(LS_EXPENSES, payload); // always write local backup first
+        lsSet(LS_EXPENSES, payload); // always write local backup immediately
 
         if (!isCloudOK()) {
             state.storageMode = 'local';
@@ -704,57 +805,74 @@
             return;
         }
 
-        const bytes = new TextEncoder().encode(payload).length;
-        if (bytes > CLOUD_LIMIT) {
-            state.storageMode = 'local';
-            updateStorageUI(true, bytes);
-            if (cb) cb();
-            return;
-        }
-
-        tg.CloudStorage.setItem('expenses', payload, (err) => {
-            state.storageMode = err ? 'local' : 'cloud';
-            if (err) showAlert('Cloud Storage មានបញ្ហា។ ប្រើ Local Storage ជំនួស។');
+        cloudWriteExpenses(payload, (err) => {
+            if (err) {
+                state.storageMode = 'local';
+                console.warn('[Storage] Cloud write failed:', err);
+                // Don't alert on every save — local backup already succeeded above
+            } else {
+                const newCount = splitIntoChunks(payload, CLOUD_KEY_LIMIT).length;
+                cloudCleanOldChunks(newCount, _prevChunkCount);
+                _prevChunkCount = newCount;
+                state.storageMode = 'cloud';
+            }
             updateStorageUI();
             if (cb) cb();
         });
     }
 
-    function persistAux() {
+    /* ── Persist aux (categories, settings, budget, etc.) ── */
+    function persistAux(cb) {
         const payload = JSON.stringify({
             customCats: state.customCats,
-            recurring: state.recurring,
-            budget: state.budget,
-            savings: state.savings,
-            settings: state.settings,
+            recurring:  state.recurring,
+            budget:     state.budget,
+            savings:    state.savings,
+            settings:   state.settings,
         });
-        lsSet(LS_AUX, payload);
-        if (isCloudOK()) tg.CloudStorage.setItem('auxData', payload, () => {});
+        lsSet(LS_AUX, payload); // always local-first
+
+        if (!isCloudOK()) { if (cb) cb(); return; }
+
+        // auxData is small (categories, settings) — should fit in one key.
+        // But split just in case.
+        const auxChunks = splitIntoChunks(payload, CLOUD_KEY_LIMIT);
+        if (auxChunks.length === 1) {
+            tg.CloudStorage.setItem(CLOUD_AUX_KEY, auxChunks[0], (err) => {
+                if (err) console.warn('[Storage] Aux cloud write failed:', err);
+                if (cb) cb();
+            });
+        } else {
+            // aux grew large — just store what fits (settings/budget/savings take priority)
+            const small = JSON.stringify({ budget: state.budget, savings: state.savings, settings: state.settings });
+            tg.CloudStorage.setItem(CLOUD_AUX_KEY, small, (err) => {
+                if (err) console.warn('[Storage] Aux cloud write failed:', err);
+                if (cb) cb();
+            });
+        }
     }
 
-    /* ── Load ── */
+    /* ── Load all data ── */
     function loadData() {
         const user = tg.initDataUnsafe?.user;
         if (user) $('welcome-text').textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
 
-        const loadFromValues = (expStr, auxStr) => {
-            const localExp = lsGet(LS_EXPENSES);
-            const localAux = lsGet(LS_AUX);
-            const expData = expStr ?? localExp;
-            const auxData = auxStr ?? localAux;
+        const applyData = (expStr, auxStr) => {
+            // Prefer cloud values; fall back to localStorage
+            const expData = (expStr && expStr.length > 2) ? expStr : (lsGet(LS_EXPENSES) || '[]');
+            const auxData = (auxStr && auxStr.length > 2) ? auxStr : (lsGet(LS_AUX) || '{}');
 
-            state.expenses = parseJ(expData, []);
-            if (!Array.isArray(state.expenses)) state.expenses = [];
+            const parsed = parseJ(expData, []);
+            state.expenses = Array.isArray(parsed) ? parsed : [];
 
             const aux = parseJ(auxData, {});
             state.customCats = Array.isArray(aux.customCats) ? aux.customCats : [];
-            state.recurring = Array.isArray(aux.recurring) ? aux.recurring : [];
-            state.budget = aux.budget || { monthly: 0 };
-            state.savings = aux.savings || { target: 0, saved: 0 };
+            state.recurring  = Array.isArray(aux.recurring)  ? aux.recurring  : [];
+            state.budget      = aux.budget   || { monthly: 0 };
+            state.savings     = aux.savings  || { target: 0, saved: 0 };
             if (aux.settings) state.settings = { ...state.settings, ...aux.settings };
 
-            state.storageMode = isCloudOK() ? 'cloud' : 'local';
-            // always sync local backup
+            // Sync local backup to match cloud
             lsSet(LS_EXPENSES, JSON.stringify(state.expenses));
             lsSet(LS_AUX, JSON.stringify({ customCats: state.customCats, recurring: state.recurring, budget: state.budget, savings: state.savings, settings: state.settings }));
 
@@ -764,23 +882,34 @@
 
         if (!isCloudOK()) {
             state.storageMode = 'local';
-            loadFromValues(null, null);
+            applyData(null, null);
             return;
         }
 
-        tg.CloudStorage.getItems(['expenses', 'auxData', 'terms'], (err, vals) => {
-            if (err) {
-                state.storageMode = 'local';
-                loadFromValues(null, null);
-                return;
-            }
-            if (!vals.terms) {
-                showConfirm('កម្មវិធីនេះរក្សាទុកទិន្នន័យរបស់អ្នកនៅក្នុង Telegram Cloud + Local Backup។ តើអ្នកយល់ព្រមទេ?', (ok) => {
-                    if (!ok) { if (typeof tg.close === 'function') tg.close(); return; }
-                    tg.CloudStorage.setItem('terms', '1', () => loadFromValues(vals.expenses, vals.auxData));
+        // Step 1: read aux + terms (small single-key reads)
+        tg.CloudStorage.getItems([CLOUD_AUX_KEY, CLOUD_TERMS_KEY], (err, vals) => {
+            const auxStr   = (!err && vals) ? (vals[CLOUD_AUX_KEY]   || '') : '';
+            const hasTerms = (!err && vals) ? (vals[CLOUD_TERMS_KEY] === '1') : false;
+
+            const proceedLoad = () => {
+                // Step 2: read chunked expenses
+                cloudReadExpenses((err2, expStr) => {
+                    // storageMode: confirmed cloud only after successful read
+                    state.storageMode = (err || err2) ? 'local' : 'cloud';
+                    applyData(expStr, auxStr);
                 });
+            };
+
+            if (!hasTerms) {
+                showConfirm(
+                    'កម្មវិធីនេះរក្សាទុកទិន្នន័យរបស់អ្នកនៅក្នុង Telegram Cloud + Local Backup។ តើអ្នកយល់ព្រមទេ?',
+                    (ok) => {
+                        if (!ok) { if (typeof tg.close === 'function') tg.close(); return; }
+                        tg.CloudStorage.setItem(CLOUD_TERMS_KEY, '1', () => proceedLoad());
+                    }
+                );
             } else {
-                loadFromValues(vals.expenses, vals.auxData);
+                proceedLoad();
             }
         });
     }
@@ -788,15 +917,23 @@
     /* ── Storage UI ── */
     function updateStorageUI(warn = false, bytes = null) {
         const b = bytes ?? new TextEncoder().encode(JSON.stringify(state.expenses)).length;
-        const ratio = Math.min(b / CLOUD_LIMIT, 1);
+        const ratio = Math.min(b / DISPLAY_LIMIT, 1);
         const pct = ratio < 0.01 ? 0 : Math.max(ratio * 100, 2);
         $('storage-fill').style.width = `${pct}%`;
-        $('storage-text').textContent = `${fmtKB(b)} / ${fmtKB(CLOUD_LIMIT)}`;
-        $('storage-mode-label').textContent = state.storageMode === 'cloud' ? '☁️ Telegram Cloud' : state.storageMode === 'local' ? '💾 Local Backup' : '⏳ Checking...';
+        $('storage-text').textContent = `${fmtKB(b)} used`;
+        $('storage-mode-label').textContent =
+            state.storageMode === 'cloud' ? '☁️ Telegram Cloud + Local' :
+            state.storageMode === 'local' ? '💾 Local Storage (backup)' :
+            '⏳ Initializing...';
         const warnEl = $('storage-warning');
-        if (ratio >= 1) { warnEl.textContent = '⚠️ Full'; warnEl.style.color = 'var(--danger)'; if (warn) showAlert('Cloud Storage ពេញ! App ប្ដូរទៅ Local Storage.'); }
-        else if (ratio >= 0.8) { warnEl.textContent = '⚠️ Nearly Full'; warnEl.style.color = '#ff9500'; if (warn) showAlert('Storage ជិតពេញ! សូមលុបចំណាយចាស់ៗ.'); }
-        else { warnEl.textContent = '✅ Healthy'; warnEl.style.color = 'var(--success)'; }
+        if (ratio >= 1) {
+            warnEl.textContent = '⚠️ Large'; warnEl.style.color = 'var(--danger)';
+            if (warn) showAlert('Data is large. Consider exporting and cleaning old records.');
+        } else if (ratio >= 0.8) {
+            warnEl.textContent = '⚠️ Growing'; warnEl.style.color = '#ff9500';
+        } else {
+            warnEl.textContent = '✅ Good'; warnEl.style.color = 'var(--success)';
+        }
     }
 
     $('btn-check-storage').addEventListener('click', () => updateStorageUI(true));
@@ -1070,8 +1207,9 @@
         });
         el.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => runRecurring(b.dataset.run)));
         el.querySelectorAll('[data-del-rec]').forEach(b => b.addEventListener('click', () => {
-            state.recurring = state.recurring.filter(r=>r.id!==b.dataset.delRec);
-            persistAux(); renderAll();
+            // dataset attribute 'data-del-rec' becomes b.dataset.delRec (camelCase)
+            state.recurring = state.recurring.filter(r => r.id !== b.dataset.delRec);
+            persistAux(() => renderAll());
         }));
     }
 
@@ -1080,8 +1218,8 @@
         if (!r) return;
         state.expenses.push({ id:uid(), amount:Number(r.amount), category:r.category, notes:`[Recurring] ${r.name}`, date:new Date().toISOString() });
         r.lastApplied = new Date().toISOString();
-        persistAux();
-        persistExpenses(() => { renderAll(); hapticNotify('success'); });
+        // persist expenses first; then persist aux (which contains updated lastApplied)
+        persistExpenses(() => { persistAux(); renderAll(); hapticNotify('success'); });
     }
 
     function isRecurringDue(r) {
@@ -1100,8 +1238,7 @@
             state.expenses.push({id:uid(),amount:Number(r.amount),category:r.category,notes:`[Recurring] ${r.name}`,date:new Date().toISOString()});
             r.lastApplied = new Date().toISOString();
         });
-        persistAux();
-        persistExpenses(()=>{renderAll();showAlert(`បានបន្ថែម ${due.length} ចំណាយប្រចាំ។`);});
+        persistExpenses(() => { persistAux(); renderAll(); showAlert(`បានបន្ថែម ${due.length} ចំណាយប្រចាំ។`); });
     });
 
     $('btn-add-rec').addEventListener('click', () => {
@@ -1112,7 +1249,7 @@
         if (!name||!amount||amount<=0||!cat) { showAlert('សូមបំពេញព័ត៌មានចំណាយប្រចាំ។'); return; }
         state.recurring.push({ id:uid(), name, amount, category:cat, frequency:freq, lastApplied:null });
         $('rec-name').value = ''; $('rec-amount').value = ''; $('rec-cat').value = '';
-        persistAux(); renderAll();
+        persistAux(() => renderAll());
     });
 
     /* ── Custom cats ── */
@@ -1145,7 +1282,7 @@
         if (!name) { showAlert('សូមបញ្ចូលឈ្មោះប្រភេទ។'); return; }
         state.customCats.push({ id:uid('cat'), name, icon:'🏷️', color:`hsl(${Math.random()*360|0} 65% 58%)` });
         $('new-cat-name').value = '';
-        persistAux(); renderAll();
+        persistAux(() => renderAll());
     });
 
     /* ── Settings ── */
@@ -1160,20 +1297,20 @@
 
     $('btn-save-budget').addEventListener('click', () => {
         state.budget.monthly = Number($('budget-input').value)||0;
-        persistAux(); renderAll(); hapticNotify('success');
+        persistAux(() => { renderAll(); hapticNotify('success'); });
     });
 
     $('btn-save-savings').addEventListener('click', () => {
         state.savings.target = Number($('savings-target').value)||0;
         state.savings.saved = Number($('savings-current').value)||0;
-        persistAux(); renderAll(); hapticNotify('success');
+        persistAux(() => { renderAll(); hapticNotify('success'); });
     });
 
     $('btn-save-settings').addEventListener('click', () => {
         state.settings.currency = $('sel-currency').value;
         state.settings.locale = $('sel-locale').value;
         state.settings.confirmDelete = $('chk-confirm-delete').checked;
-        persistAux(); renderAll(); hapticNotify('success'); showAlert('បានរក្សាទុកការកំណត់!');
+        persistAux(() => { renderAll(); hapticNotify('success'); showAlert('បានរក្សាទុកការកំណត់!'); });
     });
 
     $('btn-clear-filters').addEventListener('click', () => {
