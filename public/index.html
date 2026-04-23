@@ -3,1513 +3,1293 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>កម្មវិធីតាមដានចំណាយប្រចាំថ្ងៃ</title>
+    <title>កម្មវិធីតាមដានចំណាយ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #f2f2f7;
-            --text-color: #000000;
-            --hint-color: #999999;
-            --button-color: #007aff;
-            --button-text-color: #ffffff;
-            --secondary-bg-color: #ffffff;
-            --danger-color: #ff3b30;
+            --bg: #f2f2f7;
+            --surface: #ffffff;
+            --text: #1c1c1e;
+            --subtext: #6c6c70;
+            --accent: #007aff;
+            --accent-text: #ffffff;
+            --danger: #ff3b30;
+            --success: #34c759;
+            --border: rgba(0,0,0,0.08);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
         }
-        
-        html, body {
-            height: 100%;
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
-            -webkit-font-smoothing: antialiased;
-        }
-
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { height: 100%; overflow: hidden; position: fixed; width: 100%; }
         body {
             font-family: 'Kantumruy Pro', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            overscroll-behavior: none;
-            -webkit-tap-highlight-color: transparent;
+            background: var(--bg);
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
         }
+        #app { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 
-        #app-container {
-            height: 100vh;
-            overflow-y: auto;
-            background-color: var(--bg-color);
+        /* ── Scrollable content area ── */
+        .page-body { flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+        /* ── Header ── */
+        .app-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 16px 12px;
+            flex-shrink: 0;
         }
-
-        .header {
-            background-color: var(--secondary-bg-color);
-            padding: 1rem;
-            border-bottom: 1px solid var(--bg-color);
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-
-        .date-header {
-            padding: 0.75rem 1rem 0.25rem;
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+        .welcome-text { font-size: 17px; font-weight: 600; }
+        .report-btn {
+            background: var(--accent);
+            color: var(--accent-text);
+            border: none;
+            border-radius: 10px;
+            padding: 7px 14px;
+            font-size: 13px;
             font-weight: 600;
-            color: var(--text-color);
-        }
-
-        .content-card {
-            background-color: var(--secondary-bg-color);
-            margin: 0 1rem 1rem;
-            border-radius: 0.75rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-            overflow: hidden;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, color-mix(in srgb, var(--button-color) 14%, var(--secondary-bg-color) 86%), var(--secondary-bg-color));
-            border: 1px solid color-mix(in srgb, var(--button-color) 20%, transparent 80%);
-        }
-
-        .storage-bar-track {
-            width: 100%;
-            height: 8px;
-            border-radius: 999px;
-            background-color: color-mix(in srgb, var(--hint-color) 20%, var(--secondary-bg-color) 80%);
-            overflow: hidden;
-        }
-
-        .storage-bar-fill {
-            height: 100%;
-            width: 0%;
-            border-radius: 999px;
-            background: linear-gradient(90deg, var(--button-color), color-mix(in srgb, var(--button-color) 65%, var(--hint-color) 35%), var(--danger-color));
-            transition: width 0.25s ease;
-        }
-
-        .filter-chip {
-            border-radius: 999px;
-            border: 1px solid color-mix(in srgb, var(--hint-color) 35%, transparent 65%);
-            color: var(--hint-color);
-            font-size: 0.8rem;
-            padding: 0.35rem 0.7rem;
-            transition: all 0.2s ease;
-        }
-
-        .filter-chip.active {
-            color: var(--button-text-color);
-            background-color: var(--button-color);
-            border-color: var(--button-color);
-        }
-        
-        .list-item {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--bg-color);
+            font-family: inherit;
             cursor: pointer;
-            transition: background-color 0.2s;
+            display: flex; align-items: center; gap: 5px;
         }
-        .list-item:last-child {
-            border-bottom: none;
-        }
-        .list-item:active {
-            background-color: var(--bg-color);
-        }
+        .summary-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+        .summary-item { text-align: center; }
+        .summary-label { font-size: 12px; color: var(--subtext); }
+        .summary-value { font-size: 17px; font-weight: 700; margin-top: 2px; }
 
-        .fab {
-            position: fixed;
-            bottom: calc(2rem + env(safe-area-inset-bottom, 0));
-            right: 2rem;
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            background-color: var(--button-color);
-            color: var(--button-text-color);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            cursor: pointer;
-            transition: transform 0.2s ease, opacity 0.3s ease;
-            z-index: 15;
-        }
-        .fab:active {
-            transform: scale(0.95);
-        }
-        
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background-color: rgba(0,0,0,0.4);
-            transition: opacity 0.3s ease;
-            z-index: 20;
-        }
-
-        .modal-content {
-            position: fixed;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: var(--bg-color);
-            border-top-left-radius: 1.25rem;
-            border-top-right-radius: 1.25rem;
-            padding: 1rem;
-            padding-bottom: calc(1rem + env(safe-area-inset-bottom));
-            transform: translateY(100%);
-            transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-            max-height: 90vh;
-            overflow-y: auto;
-            z-index: 30;
-        }
-        .modal-content.open {
-            transform: translateY(0);
-        }
-        .modal-handle {
-            width: 40px;
-            height: 5px;
-            background-color: var(--hint-color);
-            border-radius: 2.5px;
-            margin: 0.25rem auto 1rem;
-            opacity: 0.5;
-        }
-        
-        input[type="date"] {
-            -webkit-appearance: none;
-            -moz-appearance: none;
-            appearance: none;
-            background: transparent;
-        }
-
-        .section-panel.hidden {
-            display: none;
-        }
-
+        /* ── Bottom Nav ── */
         .bottom-nav {
-            position: fixed;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: var(--secondary-bg-color);
-            border-top: 1px solid var(--bg-color);
+            background: var(--surface);
+            border-top: 1px solid var(--border);
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 0.25rem;
-            padding: 0.4rem 0.4rem calc(0.4rem + env(safe-area-inset-bottom, 0));
-            z-index: 25;
+            padding: 6px 4px calc(6px + var(--safe-bottom));
+            flex-shrink: 0;
         }
-
-        .bottom-nav-btn {
-            border: none;
+        .nav-btn {
             background: transparent;
-            color: var(--hint-color);
-            border-radius: 0.6rem;
-            padding: 0.5rem 0.3rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.2rem;
+            border: none;
+            color: var(--subtext);
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: 500;
+            padding: 6px 4px;
+            border-radius: 10px;
+            display: flex; flex-direction: column; align-items: center; gap: 3px;
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s;
+        }
+        .nav-btn .nav-icon { font-size: 20px; line-height: 1; }
+        .nav-btn.active { color: var(--accent); background: rgba(0,122,255,0.08); }
+
+        /* ── Section panels ── */
+        .section { display: none; padding: 0 0 80px; }
+        .section.active { display: block; }
+
+        /* ── Cards ── */
+        .card {
+            background: var(--surface);
+            border-radius: 14px;
+            margin: 12px 16px 0;
+            overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .card-header { padding: 14px 16px 8px; font-size: 15px; font-weight: 600; }
+        .card-body { padding: 0 16px 16px; }
+
+        /* ── List items ── */
+        .expense-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.1s;
+            -webkit-user-select: none; user-select: none;
+        }
+        .expense-item:last-child { border-bottom: none; }
+        .expense-item:active { background: var(--bg); }
+        .expense-icon { font-size: 28px; flex-shrink: 0; width: 36px; text-align: center; }
+        .expense-info { flex: 1; min-width: 0; }
+        .expense-cat { font-size: 15px; font-weight: 600; }
+        .expense-note { font-size: 13px; color: var(--subtext); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .expense-amount { font-size: 15px; font-weight: 700; flex-shrink: 0; }
+
+        .date-label { padding: 16px 16px 6px; font-size: 13px; font-weight: 600; color: var(--subtext); text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* ── FAB ── */
+        .fab {
+            position: fixed;
+            bottom: calc(70px + var(--safe-bottom));
+            right: 20px;
+            width: 54px; height: 54px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            font-size: 26px;
+            line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 4px 16px rgba(0,122,255,0.4);
+            cursor: pointer;
+            z-index: 50;
+            transition: transform 0.15s, opacity 0.2s;
+        }
+        .fab:active { transform: scale(0.93); }
+        .fab.hidden { opacity: 0; pointer-events: none; }
+
+        /* ── Bottom Sheet Modal ── */
+        .sheet-overlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 100;
+            opacity: 0; pointer-events: none;
+            transition: opacity 0.25s;
+        }
+        .sheet-overlay.open { opacity: 1; pointer-events: auto; }
+        .sheet {
+            position: fixed; left: 0; right: 0; bottom: 0;
+            background: var(--bg);
+            border-radius: 18px 18px 0 0;
+            z-index: 101;
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+            max-height: 92dvh;
+            overflow-y: auto;
+            padding: 0 16px calc(20px + var(--safe-bottom));
+        }
+        .sheet.open { transform: translateY(0); }
+        .sheet-handle { width: 36px; height: 4px; background: rgba(0,0,0,0.18); border-radius: 2px; margin: 10px auto 16px; }
+        .sheet-title { font-size: 18px; font-weight: 700; text-align: center; margin-bottom: 20px; }
+
+        /* ── Form elements ── */
+        .field-label { font-size: 13px; font-weight: 600; color: var(--subtext); margin-bottom: 6px; display: block; }
+        .amount-input {
+            width: 100%; border: none; background: transparent;
+            font-size: 42px; font-weight: 700; text-align: center;
+            color: var(--text); font-family: inherit;
+            padding: 8px 0; outline: none;
+        }
+        .amount-input::placeholder { color: rgba(0,0,0,0.2); }
+        .amount-wrapper {
+            background: var(--surface);
+            border-radius: 14px;
+            margin-bottom: 14px;
+            text-align: center;
+            padding: 4px 16px 12px;
+        }
+        .currency-hint { font-size: 12px; color: var(--subtext); margin-top: -8px; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+        .form-control {
+            width: 100%; border: none; border-radius: 12px;
+            background: var(--surface);
+            padding: 12px 14px;
+            font-size: 15px; font-family: inherit; color: var(--text);
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .form-control:focus { box-shadow: 0 0 0 2px var(--accent); }
+        select.form-control { cursor: pointer; }
+        .save-btn {
+            width: 100%; padding: 15px;
+            background: var(--accent); color: var(--accent-text);
+            border: none; border-radius: 14px;
+            font-size: 16px; font-weight: 700; font-family: inherit;
+            cursor: pointer; margin-top: 4px;
+            transition: opacity 0.15s;
+        }
+        .save-btn:active { opacity: 0.85; }
+        .cancel-btn {
+            width: 100%; padding: 14px;
+            background: var(--surface); color: var(--text);
+            border: none; border-radius: 14px;
+            font-size: 15px; font-weight: 600; font-family: inherit;
+            cursor: pointer; margin-top: 8px;
         }
 
-        .bottom-nav-btn.active {
-            color: var(--button-color);
-            background: color-mix(in srgb, var(--button-color) 12%, var(--secondary-bg-color) 88%);
+        /* ── Dashboard stat card ── */
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 16px; margin-top: 12px; }
+        .stat-item {
+            background: var(--surface);
+            border-radius: 14px;
+            padding: 14px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
+        .stat-item-label { font-size: 12px; color: var(--subtext); margin-bottom: 4px; }
+        .stat-item-value { font-size: 18px; font-weight: 700; }
+
+        /* ── Filter chips ── */
+        .chips { display: flex; gap: 8px; padding: 12px 16px 4px; overflow-x: auto; scrollbar-width: none; }
+        .chips::-webkit-scrollbar { display: none; }
+        .chip {
+            flex-shrink: 0; border: 1.5px solid rgba(0,0,0,0.15);
+            border-radius: 100px; padding: 5px 14px;
+            font-size: 13px; font-weight: 500; font-family: inherit;
+            color: var(--subtext); background: transparent; cursor: pointer;
+            transition: all 0.15s;
+        }
+        .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+        /* ── Storage bar ── */
+        .storage-track { height: 6px; border-radius: 100px; background: rgba(0,0,0,0.08); overflow: hidden; margin: 8px 0 4px; }
+        .storage-fill { height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--accent), var(--danger)); transition: width 0.3s; }
+
+        /* ── Manage rows ── */
+        .manage-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .manage-row:last-child { border-bottom: none; }
+        .danger-btn {
+            background: rgba(255,59,48,0.1); color: var(--danger);
+            border: none; border-radius: 8px; padding: 5px 12px;
+            font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+        }
+        .action-btn {
+            background: rgba(0,122,255,0.1); color: var(--accent);
+            border: none; border-radius: 8px; padding: 5px 12px;
+            font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
+        }
+        .inline-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 10px 14px; border-radius: 12px;
+            font-size: 14px; font-weight: 600; font-family: inherit;
+            cursor: pointer; border: none; transition: opacity 0.15s;
+        }
+        .inline-btn:active { opacity: 0.75; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-secondary { background: var(--surface); color: var(--text); }
+        .btn-danger { background: rgba(255,59,48,0.1); color: var(--danger); }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+
+        /* ── Empty state ── */
+        .empty-state { text-align: center; padding: 60px 24px; color: var(--subtext); }
+        .empty-icon { font-size: 48px; margin-bottom: 12px; }
+        .empty-title { font-size: 17px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+        .empty-sub { font-size: 14px; }
+
+        /* ── Analytics ── */
+        .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .analytic-box { background: var(--bg); border-radius: 12px; padding: 12px; }
+        .analytic-label { font-size: 12px; color: var(--subtext); margin-bottom: 4px; }
+        .analytic-value { font-size: 15px; font-weight: 700; }
+
+        /* ── Search ── */
+        .search-wrap { padding: 12px 16px 0; }
+        .search-input {
+            width: 100%; border: none; border-radius: 12px;
+            background: var(--surface);
+            padding: 11px 14px 11px 38px;
+            font-size: 15px; font-family: inherit; color: var(--text);
+            outline: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%236c6c70' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: 12px center;
+        }
+
+        /* ── Progress bar ── */
+        .progress-track { height: 8px; border-radius: 100px; background: rgba(0,0,0,0.08); overflow: hidden; margin: 6px 0; }
+        .progress-fill { height: 100%; border-radius: 100px; background: var(--accent); transition: width 0.3s; }
+        .progress-fill.danger { background: var(--danger); }
+        .progress-fill.warning { background: #ff9500; }
+
+        /* ── Sort row ── */
+        .sort-row { padding: 8px 16px 0; }
+
+        /* Telegram theme override handled in JS */
     </style>
 </head>
 <body>
-
-    <div id="app-container">
-        <header class="header">
-            <div class="flex justify-between items-center mb-4">
-                <p id="welcome-message" class="text-lg font-semibold">សូមស្វាគមន៍!</p>
-                <button id="generate-report" class="px-3 py-1.5 rounded-lg text-sm flex items-center gap-2" style="background-color: var(--button-color); color: var(--button-text-color);">
-                    <span>របាយការណ៍</span>
-                    <span>📊</span>
-                </button>
+<div id="app">
+    <!-- Header -->
+    <header class="app-header">
+        <div class="header-top">
+            <span id="welcome-text" class="welcome-text">សូមស្វាគមន៍!</span>
+            <button id="btn-report" class="report-btn">📊 របាយការណ៍</button>
+        </div>
+        <div class="summary-row">
+            <div class="summary-item">
+                <div class="summary-label">ថ្ងៃនេះ</div>
+                <div id="sum-today" class="summary-value">៛0</div>
             </div>
-            <div class="grid grid-cols-3 gap-2 text-center">
-                <div>
-                    <p class="text-sm" style="color: var(--hint-color);">ថ្ងៃនេះ</p>
-                    <p id="total-today" class="font-bold text-lg">៛០</p>
-                </div>
-                <div>
-                    <p class="text-sm" style="color: var(--hint-color);">សប្តាហ៍នេះ</p>
-                    <p id="total-week" class="font-bold text-lg">៛០</p>
-                </div>
-                <div>
-                    <p class="text-sm" style="color: var(--hint-color);">ខែនេះ</p>
-                    <p id="total-month" class="font-bold text-lg">៛០</p>
+            <div class="summary-item">
+                <div class="summary-label">សប្តាហ៍</div>
+                <div id="sum-week" class="summary-value">៛0</div>
+            </div>
+            <div class="summary-item">
+                <div class="summary-label">ខែ</div>
+                <div id="sum-month" class="summary-value">៛0</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Pages -->
+    <div class="page-body" id="page-body">
+
+        <!-- HOME -->
+        <div id="section-home" class="section active">
+            <div class="stat-grid" id="home-stats"></div>
+
+            <div class="card" style="margin-top:12px;">
+                <div class="card-header">Storage</div>
+                <div class="card-body">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span id="storage-mode-label" style="font-size:13px;color:var(--subtext);">Checking...</span>
+                        <span id="storage-warning" style="font-size:12px;color:var(--success);">Healthy</span>
+                    </div>
+                    <div class="storage-track"><div id="storage-fill" class="storage-fill" style="width:0%"></div></div>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--subtext);">
+                        <span id="storage-text">0 KB / 32 KB</span>
+                        <button id="btn-check-storage" style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;">ពិនិត្យ</button>
+                    </div>
                 </div>
             </div>
-        </header>
 
-        <main id="main-content" class="pb-44">
-             <section id="section-dashboard" class="section-panel">
-                <div class="content-card stat-card p-4 mt-4">
-                <div class="flex justify-between items-center gap-2">
-                    <div>
-                        <h2 class="text-base font-semibold">Storage Status</h2>
-                        <p id="storage-mode-text" class="text-sm" style="color: var(--hint-color);">Checking...</p>
+            <div class="card">
+                <div class="card-header">ថវិកា & គោលដៅសន្សំ</div>
+                <div class="card-body">
+                    <label class="field-label">ថវិកាប្រចាំខែ</label>
+                    <div class="grid-2" style="margin-bottom:10px;">
+                        <input id="budget-input" type="number" placeholder="0" class="form-control">
+                        <button id="btn-save-budget" class="inline-btn btn-primary">រក្សាទុក</button>
                     </div>
-                    <button id="check-storage-btn" class="px-3 py-1.5 rounded-lg text-xs font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">
-                        ពិនិត្យ
-                    </button>
+                    <label class="field-label">គោលដៅសន្សំ</label>
+                    <div class="grid-2" style="margin-bottom:10px;">
+                        <input id="savings-target" type="number" placeholder="គោលដៅ" class="form-control">
+                        <input id="savings-current" type="number" placeholder="បានសន្សំ" class="form-control">
+                    </div>
+                    <button id="btn-save-savings" class="inline-btn btn-primary" style="width:100%;">រក្សាទុកគោលដៅ</button>
+                    <div id="budget-progress" style="margin-top:12px;font-size:13px;color:var(--subtext);"></div>
+                    <div id="savings-progress" style="margin-top:8px;font-size:13px;color:var(--subtext);"></div>
                 </div>
-                <div class="mt-3 storage-bar-track">
-                    <div id="storage-usage-fill" class="storage-bar-fill"></div>
-                </div>
-                 <div class="mt-2 flex justify-between text-xs" style="color: var(--hint-color);">
-                     <span id="storage-usage-text">0 KB / 0 KB</span>
-                     <span id="storage-warning-text">-</span>
-                 </div>
-                </div>
+            </div>
 
-                <div class="content-card p-4 mt-4">
-                    <h2 class="text-lg font-semibold mb-3">Budget & Goals</h2>
-                    <div class="grid grid-cols-2 gap-2 mb-3">
-                        <input id="budget-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Monthly budget">
-                        <button id="save-budget-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save Budget</button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 mb-3">
-                        <input id="savings-target-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Savings target">
-                        <input id="savings-current-input" type="number" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Already saved">
-                    </div>
-                    <button id="save-savings-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Save Goal</button>
-                    <div class="mt-3 text-sm" style="color: var(--hint-color);">
-                        <p id="budget-status-text">Budget status: -</p>
-                        <p id="savings-status-text">Savings progress: -</p>
+            <div class="card">
+                <div class="card-header">សកម្មភាពរហ័ស</div>
+                <div class="card-body">
+                    <div class="grid-2">
+                        <button id="btn-apply-recurring" class="inline-btn btn-secondary" style="width:100%;">Apply Recurring</button>
+                        <button id="btn-clear-filters" class="inline-btn btn-secondary" style="width:100%;">Clear Filters</button>
+                        <button id="btn-reset-month" class="inline-btn btn-danger" style="width:100%;">Reset Month</button>
+                        <button id="btn-export" class="inline-btn btn-secondary" style="width:100%;">Export JSON</button>
                     </div>
                 </div>
-
-                <div class="content-card p-4 mt-4">
-                    <h2 class="text-lg font-semibold mb-2">Quick Actions</h2>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button id="apply-recurring-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Apply Recurring</button>
-                        <button id="clear-filters-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Clear Filters</button>
-                        <button id="reset-month-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Reset This Month</button>
-                        <button id="check-storage-btn-2" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Check Storage</button>
-                    </div>
-                </div>
-             </section>
-
-             <section id="section-analytics" class="section-panel hidden">
-                <div class="content-card p-4 mt-4">
-                <h2 class="text-lg font-semibold mb-2">ចំណាយប្រចាំខែនេះ</h2>
-                <canvas id="expense-chart"></canvas>
-                </div>
-                <div class="content-card p-4">
-                    <h2 class="text-lg font-semibold mb-2">Analytics</h2>
-                    <div class="grid grid-cols-2 gap-2 text-sm">
-                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Transactions</p><p id="analytics-total-transactions" class="font-bold">0</p></div>
-                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Avg / Txn</p><p id="analytics-avg-transaction" class="font-bold">៛០</p></div>
-                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Top Category</p><p id="analytics-top-category" class="font-bold">-</p></div>
-                        <div class="p-3 rounded-lg" style="background-color: var(--bg-color);"><p style="color: var(--hint-color);">Largest Expense</p><p id="analytics-largest-expense" class="font-bold">៛០</p></div>
-                    </div>
-                </div>
-             </section>
-
-             <section id="section-transactions" class="section-panel hidden">
-                <div class="content-card p-4 mt-4">
-                 <div class="flex items-center gap-2 mb-3">
-                     <button class="filter-chip active" data-period-filter="all">ទាំងអស់</button>
-                     <button class="filter-chip" data-period-filter="today">ថ្ងៃនេះ</button>
-                     <button class="filter-chip" data-period-filter="month">ខែនេះ</button>
-                 </div>
-                 <select id="sort-select" class="w-full p-3 border-0 rounded-lg text-sm mb-3" style="background-color: var(--bg-color);">
-                    <option value="date_desc">ថ្មីទៅចាស់</option>
-                    <option value="date_asc">ចាស់ទៅថ្មី</option>
-                    <option value="amount_desc">ចំណាយច្រើនទៅតិច</option>
-                    <option value="amount_asc">ចំណាយតិចទៅច្រើន</option>
-                 </select>
-                 <input id="search-input" type="text" class="w-full p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="ស្វែងរកតាមចំណាំ ឬប្រភេទ...">
-                </div>
-                <div id="history-placeholder" class="text-center py-16 px-4" style="color: var(--hint-color);">
-                 <p class="text-lg">មិនទាន់មានការចំណាយទេ។</p>
-                 <p class="mt-2">ចុចប៊ូតុង (+) ដើម្បីបន្ថែមការចំណាយដំបូងរបស់អ្នក។</p>
-                </div>
-             </section>
-
-             <section id="section-manage" class="section-panel hidden">
-                <div class="content-card p-4 mt-4">
-                    <h2 class="text-lg font-semibold mb-2">Custom Categories</h2>
-                    <div class="grid grid-cols-3 gap-2 mb-2">
-                        <input id="category-name-input" type="text" class="p-3 border-0 rounded-lg text-sm col-span-2" style="background-color: var(--bg-color);" placeholder="Category name">
-                        <button id="add-category-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Add</button>
-                    </div>
-                    <div id="custom-categories-list" class="space-y-2 text-sm"></div>
-                </div>
-                <div class="content-card p-4">
-                    <h2 class="text-lg font-semibold mb-2">Recurring Expenses</h2>
-                    <div class="grid grid-cols-2 gap-2 mb-2">
-                        <input id="recurring-name-input" type="text" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Name">
-                        <input id="recurring-amount-input" type="number" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);" placeholder="Amount">
-                        <select id="recurring-category-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);"></select>
-                        <select id="recurring-frequency-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);">
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                        </select>
-                    </div>
-                    <button id="add-recurring-btn" class="w-full p-3 rounded-lg text-sm font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">Add Recurring</button>
-                    <div id="recurring-list" class="space-y-2 text-sm mt-2"></div>
-                </div>
-                <div class="content-card p-4">
-                    <h2 class="text-lg font-semibold mb-2">Backup & Settings</h2>
-                    <div class="grid grid-cols-2 gap-2 mb-2">
-                        <button id="export-data-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Export JSON</button>
-                        <button id="import-data-btn" class="p-3 rounded-lg text-sm font-semibold" style="background-color: var(--bg-color);">Import JSON</button>
-                    </div>
-                    <input id="import-data-input" type="file" class="hidden" accept="application/json">
-                    <div class="grid grid-cols-2 gap-2">
-                        <select id="currency-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);">
-                            <option value="KHR">KHR</option>
-                            <option value="USD">USD</option>
-                        </select>
-                        <select id="locale-select" class="p-3 border-0 rounded-lg text-sm" style="background-color: var(--bg-color);">
-                            <option value="km-KH">km-KH</option>
-                            <option value="en-US">en-US</option>
-                        </select>
-                    </div>
-                    <label class="flex items-center gap-2 text-sm mt-2">
-                        <input id="delete-confirm-checkbox" type="checkbox" checked>
-                        <span>Require confirmation before delete</span>
-                    </label>
-                    <button id="save-settings-btn" class="w-full p-3 rounded-lg text-sm font-semibold mt-2" style="background-color: var(--button-color); color: var(--button-text-color);">Save Settings</button>
-                </div>
-             </section>
-        </main>
-
-        <div id="fab" class="fab">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </div>
         </div>
 
-        <nav class="bottom-nav">
-            <button class="bottom-nav-btn active" data-section="dashboard" aria-label="Dashboard"><span>🏠</span><span>Home</span></button>
-            <button class="bottom-nav-btn" data-section="transactions" aria-label="Transactions"><span>🧾</span><span>Transactions</span></button>
-            <button class="bottom-nav-btn" data-section="analytics" aria-label="Analytics"><span>📈</span><span>Analytics</span></button>
-            <button class="bottom-nav-btn" data-section="manage" aria-label="Manage"><span>⚙️</span><span>Manage</span></button>
-        </nav>
-    </div>
-
-    <!-- Expense Modal -->
-    <div id="modal-overlay" class="modal-overlay hidden"></div>
-    <div id="modal-content" class="modal-content">
-        <div class="modal-handle"></div>
-        <h2 id="modal-title" class="text-xl font-bold text-center mb-4"></h2>
-        <form id="expense-form" class="space-y-4">
-            <input type="number" id="amount-input" placeholder="៛០" class="w-full text-4xl font-bold p-2 text-center border-0 bg-transparent" required>
-            <div class="grid grid-cols-2 gap-4">
-                <select id="category-select" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required></select>
-                <input type="date" id="date-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" required>
+        <!-- TRANSACTIONS -->
+        <div id="section-transactions" class="section">
+            <div class="chips">
+                <button class="chip active" data-filter="all">ទាំងអស់</button>
+                <button class="chip" data-filter="today">ថ្ងៃនេះ</button>
+                <button class="chip" data-filter="week">សប្តាហ៍</button>
+                <button class="chip" data-filter="month">ខែ</button>
             </div>
-            <input type="text" id="notes-input" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);" placeholder="កំណត់ចំណាំ (បើមាន)">
-            <input type="hidden" id="expense-id-input">
-        </form>
-    </div>
-
-    <!-- Report Configuration Modal -->
-    <div id="report-modal-overlay" class="modal-overlay hidden"></div>
-    <div id="report-modal-content" class="modal-content">
-        <div class="modal-handle"></div>
-        <h2 class="text-xl font-bold text-center mb-4">បង្កើតរបាយការណ៍</h2>
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-semibold mb-2" style="color: var(--text-color);">ជ្រើសរើសរយៈពេល</label>
-                <select id="report-period-select" class="w-full p-3 border-0 rounded-lg" style="background-color: var(--secondary-bg-color);">
-                    <option value="today">ថ្ងៃនេះ</option>
-                    <option value="yesterday">ម្សិលមិញ</option>
-                    <option value="week">សប្តាហ៍នេះ</option>
-                    <option value="last-week">សប្តាហ៍មុន</option>
-                    <option value="month" selected>ខែនេះ</option>
-                    <option value="last-month">ខែមុន</option>
-                    <option value="all">ទាំងអស់</option>
+            <div class="search-wrap">
+                <input id="search-input" class="search-input" placeholder="ស្វែងរក...">
+            </div>
+            <div class="sort-row">
+                <select id="sort-select" class="form-control" style="font-size:13px;padding:9px 12px;">
+                    <option value="date_desc">ថ្មី → ចាស់</option>
+                    <option value="date_asc">ចាស់ → ថ្មី</option>
+                    <option value="amount_desc">ច្រើន → តិច</option>
+                    <option value="amount_asc">តិច → ច្រើន</option>
                 </select>
             </div>
-            <button id="generate-report-confirm" class="w-full p-3 rounded-lg font-semibold" style="background-color: var(--button-color); color: var(--button-text-color);">
-                បង្កើតរបាយការណ៍
-            </button>
-            <button id="close-report-modal" class="w-full p-3 rounded-lg font-semibold" style="background-color: var(--bg-color); color: var(--text-color);">
-                បោះបង់
-            </button>
+            <div id="transaction-list"></div>
         </div>
+
+        <!-- ANALYTICS -->
+        <div id="section-analytics" class="section">
+            <div class="card">
+                <div class="card-header">ចំណាយតាមប្រភេទ (ខែ)</div>
+                <div class="card-body" style="padding-top:8px;">
+                    <canvas id="expense-chart" style="max-height:240px;"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">ស្ថិតិ</div>
+                <div class="card-body">
+                    <div class="analytics-grid">
+                        <div class="analytic-box"><div class="analytic-label">ប្រតិបត្តិការ</div><div id="stat-count" class="analytic-value">0</div></div>
+                        <div class="analytic-box"><div class="analytic-label">មធ្យម / ដង</div><div id="stat-avg" class="analytic-value">-</div></div>
+                        <div class="analytic-box"><div class="analytic-label">ប្រភេទខ្ពស់</div><div id="stat-top-cat" class="analytic-value">-</div></div>
+                        <div class="analytic-box"><div class="analytic-label">ចំណាយខ្ពស់</div><div id="stat-max" class="analytic-value">-</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MANAGE -->
+        <div id="section-manage" class="section">
+            <div class="card">
+                <div class="card-header">ប្រភេទផ្ទាល់ខ្លួន</div>
+                <div class="card-body">
+                    <div class="grid-3" style="margin-bottom:10px;">
+                        <input id="new-cat-name" class="form-control" placeholder="ឈ្មោះប្រភេទ">
+                        <button id="btn-add-cat" class="inline-btn btn-primary">Add</button>
+                    </div>
+                    <div id="custom-cat-list"></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">ចំណាយប្រចាំ</div>
+                <div class="card-body">
+                    <div class="grid-2" style="margin-bottom:10px;">
+                        <input id="rec-name" class="form-control" placeholder="ឈ្មោះ">
+                        <input id="rec-amount" type="number" class="form-control" placeholder="ចំនួន">
+                        <select id="rec-cat" class="form-control"></select>
+                        <select id="rec-freq" class="form-control">
+                            <option value="daily">ប្រចាំថ្ងៃ</option>
+                            <option value="weekly">ប្រចាំសប្តាហ៍</option>
+                            <option value="monthly" selected>ប្រចាំខែ</option>
+                        </select>
+                    </div>
+                    <button id="btn-add-rec" class="inline-btn btn-primary" style="width:100%;">Add Recurring</button>
+                    <div id="rec-list" style="margin-top:10px;"></div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">ការកំណត់</div>
+                <div class="card-body">
+                    <div class="grid-2" style="margin-bottom:10px;">
+                        <select id="sel-currency" class="form-control">
+                            <option value="KHR">KHR (៛)</option>
+                            <option value="USD">USD ($)</option>
+                        </select>
+                        <select id="sel-locale" class="form-control">
+                            <option value="km-KH">ខ្មែរ</option>
+                            <option value="en-US">English</option>
+                        </select>
+                    </div>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:12px;">
+                        <input id="chk-confirm-delete" type="checkbox" checked style="width:18px;height:18px;accent-color:var(--accent);">
+                        <span>បញ្ជាក់មុនលុប</span>
+                    </label>
+                    <div class="grid-2">
+                        <button id="btn-save-settings" class="inline-btn btn-primary" style="width:100%;">Save Settings</button>
+                        <button id="btn-import" class="inline-btn btn-secondary" style="width:100%;">Import JSON</button>
+                    </div>
+                    <input id="import-file" type="file" accept=".json,application/json" style="display:none;">
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /page-body -->
+
+    <!-- FAB -->
+    <button id="fab" class="fab">+</button>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav">
+        <button class="nav-btn active" data-section="home"><span class="nav-icon">🏠</span><span>ទំព័រដើម</span></button>
+        <button class="nav-btn" data-section="transactions"><span class="nav-icon">🧾</span><span>ប្រតិបត្តិការ</span></button>
+        <button class="nav-btn" data-section="analytics"><span class="nav-icon">📈</span><span>វិភាគ</span></button>
+        <button class="nav-btn" data-section="manage"><span class="nav-icon">⚙️</span><span>គ្រប់គ្រង</span></button>
+    </nav>
+</div>
+
+<!-- Expense Sheet -->
+<div id="expense-overlay" class="sheet-overlay"></div>
+<div id="expense-sheet" class="sheet">
+    <div class="sheet-handle"></div>
+    <div id="expense-sheet-title" class="sheet-title">បន្ថែមចំណាយ</div>
+    <div class="amount-wrapper">
+        <input id="inp-amount" class="amount-input" type="number" inputmode="decimal" placeholder="0" required>
+        <div class="currency-hint" id="currency-hint">KHR (រៀល)</div>
     </div>
+    <label class="field-label">ប្រភេទ</label>
+    <select id="inp-cat" class="form-control" style="margin-bottom:14px;" required></select>
+    <label class="field-label">កាលបរិច្ឆេទ</label>
+    <input id="inp-date" type="date" class="form-control" style="margin-bottom:14px;" required>
+    <label class="field-label">កំណត់ចំណាំ (ស្រេចចិត្ត)</label>
+    <input id="inp-notes" type="text" class="form-control" style="margin-bottom:20px;" placeholder="ចំណាំ...">
+    <input type="hidden" id="inp-id">
+    <button id="btn-save-expense" class="save-btn">💾 រក្សាទុក</button>
+    <button id="btn-cancel-expense" class="cancel-btn">បោះបង់</button>
+</div>
 
-    <script>
-        function initializeApp() {
-            const tg = window.Telegram.WebApp;
-            const isStorageSupported = tg.isVersionAtLeast('6.9');
-            // Conservative soft cap (32KB) used to warn early and switch safely before CloudStorage write errors.
-            const CLOUD_SOFT_LIMIT_BYTES = 32 * 1024;
-            const STORAGE_WARNING_THRESHOLD = 0.8;
-            const MIN_STORAGE_BAR_PERCENT = 2;
-            const DEFAULT_CATEGORY_ID = 'other';
-            const LOCAL_STORAGE_KEY = 'yi_spending_tracker_expenses';
-            const AUX_STORAGE_KEY = 'yi_spending_tracker_aux_data';
+<!-- Report Sheet -->
+<div id="report-overlay" class="sheet-overlay"></div>
+<div id="report-sheet" class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">បង្កើតរបាយការណ៍</div>
+    <label class="field-label">ជ្រើសរើសរយៈពេល</label>
+    <select id="report-period" class="form-control" style="margin-bottom:16px;">
+        <option value="today">ថ្ងៃនេះ</option>
+        <option value="yesterday">ម្សិលមិញ</option>
+        <option value="week">សប្តាហ៍នេះ</option>
+        <option value="last-week">សប្តាហ៍មុន</option>
+        <option value="month" selected>ខែនេះ</option>
+        <option value="last-month">ខែមុន</option>
+        <option value="all">ទាំងអស់</option>
+    </select>
+    <button id="btn-gen-report" class="save-btn">📊 បង្កើតរបាយការណ៍</button>
+    <button id="btn-close-report" class="cancel-btn">បោះបង់</button>
+</div>
 
-            const state = {
-                expenses: [],
-                filteredExpenses: [],
-                defaultCategories: [
-                    { id: 'food', name: 'អាហារ', icon: '🍔', color: '#FF6384' },
-                    { id: 'transport', name: 'ការធ្វើដំណើរ', icon: '🛵', color: '#36A2EB' },
-                    { id: 'bills', name: 'វិក្កយបត្រ', icon: '🧾', color: '#FFCE56' },
-                    { id: 'shopping', name: 'ការដើរទិញឥវ៉ាន់', icon: '🛍️', color: '#4BC0C0' },
-                    { id: 'entertainment', name: 'ការកម្សាន្ត', icon: '🎬', color: '#9966FF' },
-                    { id: 'other', name: 'ផ្សេងៗ', icon: '💸', color: '#C9CBCF' },
-                ],
-                customCategories: [],
-                recurringItems: [],
-                budget: { monthly: 0 },
-                savingsGoal: { target: 0, saved: 0 },
-                settings: { currency: 'KHR', locale: 'km-KH', requireDeleteConfirm: true },
-                chartInstance: null,
-                storageMode: 'unknown',
-                ui: {
-                    search: '',
-                    periodFilter: 'all',
-                    sortBy: 'date_desc',
-                    activeSection: 'dashboard',
-                },
-            };
-            
-            // UI Elements
-            const welcomeMessageEl = document.getElementById('welcome-message');
-            const totalTodayEl = document.getElementById('total-today');
-            const totalWeekEl = document.getElementById('total-week');
-            const totalMonthEl = document.getElementById('total-month');
-            const storageModeText = document.getElementById('storage-mode-text');
-            const storageUsageFill = document.getElementById('storage-usage-fill');
-            const storageUsageText = document.getElementById('storage-usage-text');
-            const storageWarningText = document.getElementById('storage-warning-text');
-            const checkStorageBtn = document.getElementById('check-storage-btn');
-            const mainContent = document.getElementById('main-content');
-            const historyPlaceholder = document.getElementById('history-placeholder');
-            const chartCanvas = document.getElementById('expense-chart').getContext('2d');
-            const searchInput = document.getElementById('search-input');
-            const filterChips = document.querySelectorAll('[data-period-filter]');
-            const fab = document.getElementById('fab');
-            const generateReportBtn = document.getElementById('generate-report');
-            const sortSelect = document.getElementById('sort-select');
-            const navButtons = document.querySelectorAll('.bottom-nav-btn');
-            const sectionDashboard = document.getElementById('section-dashboard');
-            const sectionTransactions = document.getElementById('section-transactions');
-            const sectionAnalytics = document.getElementById('section-analytics');
-            const sectionManage = document.getElementById('section-manage');
-            const budgetInput = document.getElementById('budget-input');
-            const saveBudgetBtn = document.getElementById('save-budget-btn');
-            const savingsTargetInput = document.getElementById('savings-target-input');
-            const savingsCurrentInput = document.getElementById('savings-current-input');
-            const saveSavingsBtn = document.getElementById('save-savings-btn');
-            const budgetStatusText = document.getElementById('budget-status-text');
-            const savingsStatusText = document.getElementById('savings-status-text');
-            const analyticsTotalTransactions = document.getElementById('analytics-total-transactions');
-            const analyticsAvgTransaction = document.getElementById('analytics-avg-transaction');
-            const analyticsTopCategory = document.getElementById('analytics-top-category');
-            const analyticsLargestExpense = document.getElementById('analytics-largest-expense');
-            const clearFiltersBtn = document.getElementById('clear-filters-btn');
-            const resetMonthBtn = document.getElementById('reset-month-btn');
-            const applyRecurringBtn = document.getElementById('apply-recurring-btn');
-            const checkStorageBtn2 = document.getElementById('check-storage-btn-2');
-            const categoryNameInput = document.getElementById('category-name-input');
-            const addCategoryBtn = document.getElementById('add-category-btn');
-            const customCategoriesList = document.getElementById('custom-categories-list');
-            const recurringNameInput = document.getElementById('recurring-name-input');
-            const recurringAmountInput = document.getElementById('recurring-amount-input');
-            const recurringCategorySelect = document.getElementById('recurring-category-select');
-            const recurringFrequencySelect = document.getElementById('recurring-frequency-select');
-            const addRecurringBtn = document.getElementById('add-recurring-btn');
-            const recurringList = document.getElementById('recurring-list');
-            const exportDataBtn = document.getElementById('export-data-btn');
-            const importDataBtn = document.getElementById('import-data-btn');
-            const importDataInput = document.getElementById('import-data-input');
-            const currencySelect = document.getElementById('currency-select');
-            const localeSelect = document.getElementById('locale-select');
-            const deleteConfirmCheckbox = document.getElementById('delete-confirm-checkbox');
-            const saveSettingsBtn = document.getElementById('save-settings-btn');
+<script>
+(function () {
+    /* ── Telegram setup ── */
+    const tg = window.Telegram?.WebApp || {};
+    const tgReady = typeof tg.ready === 'function';
+    if (tgReady) tg.ready();
+    if (typeof tg.expand === 'function') tg.expand();
 
-            // Modal Elements
-            const modalOverlay = document.getElementById('modal-overlay');
-            const modalContent = document.getElementById('modal-content');
-            const modalTitle = document.getElementById('modal-title');
-            const expenseForm = document.getElementById('expense-form');
-            const amountInput = document.getElementById('amount-input');
-            const categorySelect = document.getElementById('category-select');
-            const dateInput = document.getElementById('date-input');
-            const notesInput = document.getElementById('notes-input');
-            const expenseIdInput = document.getElementById('expense-id-input');
+    const showAlert = (msg) => typeof tg.showAlert === 'function' ? tg.showAlert(msg) : alert(msg);
+    const showConfirm = (msg, cb) => typeof tg.showConfirm === 'function' ? tg.showConfirm(msg, cb) : cb(confirm(msg));
+    const haptic = (type) => { try { tg.HapticFeedback?.impactOccurred?.(type); } catch(e){} };
+    const hapticNotify = (type) => { try { tg.HapticFeedback?.notificationOccurred?.(type); } catch(e){} };
+    const isCloudOK = () => tg.isVersionAtLeast?.('6.9') && typeof tg.CloudStorage?.getItems === 'function' && typeof tg.CloudStorage?.setItem === 'function';
 
-            // Report Modal Elements
-            const reportModalOverlay = document.getElementById('report-modal-overlay');
-            const reportModalContent = document.getElementById('report-modal-content');
-            const reportPeriodSelect = document.getElementById('report-period-select');
-            const generateReportConfirm = document.getElementById('generate-report-confirm');
-            const closeReportModal = document.getElementById('close-report-modal');
+    /* ── Theme ── */
+    function applyTheme() {
+        const p = tg.themeParams || {};
+        const set = (k, v) => v && document.documentElement.style.setProperty(k, v);
+        set('--bg', p.secondary_bg_color);
+        set('--surface', p.bg_color);
+        set('--text', p.text_color);
+        set('--subtext', p.hint_color);
+        set('--accent', p.button_color);
+        set('--accent-text', p.button_text_color);
+        if (typeof tg.setHeaderColor === 'function' && p.bg_color) tg.setHeaderColor(p.bg_color);
+    }
+    applyTheme();
+    if (typeof tg.onEvent === 'function') tg.onEvent('themeChanged', applyTheme);
 
-            // --- UI Rendering ---
-            function applyTheme() {
-                const themeParams = tg.themeParams;
-                const styles = {
-                    '--bg-color': themeParams.secondary_bg_color || '#f2f2f7',
-                    '--text-color': themeParams.text_color || '#000000',
-                    '--hint-color': themeParams.hint_color || '#999999',
-                    '--button-color': themeParams.button_color || '#007aff',
-                    '--button-text-color': themeParams.button_text_color || '#ffffff',
-                    '--secondary-bg-color': themeParams.bg_color || '#ffffff',
-                };
-                for (const [key, value] of Object.entries(styles)) {
-                    document.documentElement.style.setProperty(key, value);
-                }
-                tg.setHeaderColor(themeParams.bg_color || '#ffffff');
+    /* ── Constants ── */
+    const CLOUD_LIMIT = 32 * 1024; // 32 KB soft cap
+    const LS_EXPENSES = 'yi_exp_v2';
+    const LS_AUX = 'yi_aux_v2';
+    const DEFAULT_CAT = 'other';
+
+    /* ── State ── */
+    const state = {
+        expenses: [],
+        customCats: [],
+        recurring: [],
+        budget: { monthly: 0 },
+        savings: { target: 0, saved: 0 },
+        settings: { currency: 'KHR', locale: 'km-KH', confirmDelete: true },
+        ui: { section: 'home', filter: 'all', sort: 'date_desc', search: '' },
+        storageMode: 'unknown',
+        chartInstance: null,
+    };
+
+    const DEFAULT_CATS = [
+        { id:'food',          name:'អាហារ',              icon:'🍔', color:'#FF6384' },
+        { id:'transport',     name:'ការធ្វើដំណើរ',        icon:'🛵', color:'#36A2EB' },
+        { id:'bills',         name:'វិក្កយបត្រ',          icon:'🧾', color:'#FFCE56' },
+        { id:'shopping',      name:'ការទិញឥវ៉ាន់',       icon:'🛍️', color:'#4BC0C0' },
+        { id:'entertainment', name:'ការកម្សាន្ត',         icon:'🎬', color:'#9966FF' },
+        { id:'health',        name:'សុខភាព',             icon:'💊', color:'#FF9F40' },
+        { id:'other',         name:'ផ្សេងៗ',              icon:'💸', color:'#C9CBCF' },
+    ];
+
+    const allCats = () => [...DEFAULT_CATS, ...state.customCats];
+    const getCat = (id) => allCats().find(c => c.id === id) || { name:'?', icon:'💸', color:'#ccc' };
+    const fmt = (n) => new Intl.NumberFormat(state.settings.locale, { style:'currency', currency:state.settings.currency, minimumFractionDigits:0, maximumFractionDigits:0 }).format(n || 0);
+    const fmtKB = (b) => `${(b/1024).toFixed(1)} KB`;
+    const uid = () => (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID() : `id_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const todayStr = () => new Date().toISOString().slice(0,10);
+    const lsGet = (k) => { try { return localStorage.getItem(k); } catch(e){ return null; } };
+    const lsSet = (k,v) => { try { localStorage.setItem(k,v); return true; } catch(e){ return false; } };
+    const parseJ = (s, fb) => { if (!s) return fb; try { return JSON.parse(s); } catch(e) { return fb; } };
+    const sanitize = (s, max=200) => String(s||'').replace(/[<>]/g,'').trim().slice(0,max);
+
+    /* ── DOM refs ── */
+    const $ = (id) => document.getElementById(id);
+    const $$ = (sel) => document.querySelectorAll(sel);
+
+    /* ── Navigation ── */
+    function setSection(name) {
+        state.ui.section = name;
+        $$('.section').forEach(s => s.classList.remove('active'));
+        $(`section-${name}`)?.classList.add('active');
+        $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.section === name));
+        $('fab').classList.toggle('hidden', name !== 'home' && name !== 'transactions');
+        if (name === 'analytics') renderChart();
+    }
+
+    $$('.nav-btn').forEach(b => b.addEventListener('click', () => setSection(b.dataset.section)));
+
+    /* ── Sheets ── */
+    function openSheet(overlay, sheet) {
+        overlay.classList.add('open');
+        setTimeout(() => sheet.classList.add('open'), 10);
+        haptic('light');
+    }
+    function closeSheet(overlay, sheet) {
+        sheet.classList.remove('open');
+        overlay.classList.remove('open');
+    }
+
+    const expOverlay = $('expense-overlay');
+    const expSheet = $('expense-sheet');
+    const repOverlay = $('report-overlay');
+    const repSheet = $('report-sheet');
+
+    expOverlay.addEventListener('click', () => closeSheet(expOverlay, expSheet));
+    $('btn-cancel-expense').addEventListener('click', () => closeSheet(expOverlay, expSheet));
+    repOverlay.addEventListener('click', () => closeSheet(repOverlay, repSheet));
+    $('btn-close-report').addEventListener('click', () => closeSheet(repOverlay, repSheet));
+
+    function openExpenseModal(expense) {
+        populateCatDropdown();
+        if (expense) {
+            $('expense-sheet-title').textContent = 'កែសម្រួលចំណាយ';
+            $('inp-amount').value = expense.amount;
+            $('inp-cat').value = expense.category;
+            $('inp-date').value = expense.date.slice(0,10);
+            $('inp-notes').value = expense.notes || '';
+            $('inp-id').value = expense.id;
+        } else {
+            $('expense-sheet-title').textContent = 'បន្ថែមចំណាយថ្មី';
+            $('inp-amount').value = '';
+            $('inp-cat').value = '';
+            $('inp-date').value = todayStr();
+            $('inp-notes').value = '';
+            $('inp-id').value = '';
+        }
+        $('currency-hint').textContent = state.settings.currency === 'USD' ? 'USD (ដុល្លារ)' : 'KHR (រៀល)';
+        openSheet(expOverlay, expSheet);
+        setTimeout(() => $('inp-amount').focus(), 350);
+    }
+
+    $('fab').addEventListener('click', () => openExpenseModal(null));
+    $('btn-report').addEventListener('click', () => openSheet(repOverlay, repSheet));
+
+    /* ── Save expense — THE CORE FIX ── */
+    $('btn-save-expense').addEventListener('click', saveExpense);
+
+    function saveExpense() {
+        const amount = parseFloat($('inp-amount').value);
+        const cat = $('inp-cat').value;
+        const date = $('inp-date').value;
+        const notes = sanitize($('inp-notes').value, 200);
+        const id = $('inp-id').value;
+
+        if (!amount || amount <= 0) { showAlert('សូមបញ្ចូលចំនួនទឹកប្រាក់ត្រឹមត្រូវ។'); return; }
+        if (!cat) { showAlert('សូមជ្រើសរើសប្រភេទ។'); return; }
+        if (!date) { showAlert('សូមជ្រើសរើសកាលបរិច្ឆេទ។'); return; }
+
+        const dateISO = new Date(date + 'T12:00:00').toISOString(); // noon to avoid timezone issues
+
+        if (id) {
+            const idx = state.expenses.findIndex(e => e.id === id);
+            if (idx > -1) {
+                state.expenses[idx] = { ...state.expenses[idx], amount, category: cat, notes, date: dateISO };
             }
-            
-            const formatCurrency = (amount) => new Intl.NumberFormat(
-                state.settings.locale || 'km-KH',
-                { style: 'currency', currency: state.settings.currency || 'KHR', minimumFractionDigits: 0, maximumFractionDigits: 0 }
-            ).format(amount);
-            const formatStorage = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
-            const safeAlert = (message) => (tg.showAlert ? tg.showAlert(message) : alert(message));
-            const isCloudAvailable = () => isStorageSupported && tg.CloudStorage && typeof tg.CloudStorage.getItems === 'function' && typeof tg.CloudStorage.setItem === 'function';
-            const safeLocalStorageGet = () => {
-                try { return localStorage.getItem(LOCAL_STORAGE_KEY); } catch (e) { return null; }
-            };
-            const safeLocalStorageSet = (value) => {
-                try { localStorage.setItem(LOCAL_STORAGE_KEY, value); return true; } catch (e) { return false; }
-            };
-            const safeLocalAuxGet = () => {
-                try { return localStorage.getItem(AUX_STORAGE_KEY); } catch (e) { return null; }
-            };
-            const safeLocalAuxSet = (value) => {
-                try { localStorage.setItem(AUX_STORAGE_KEY, value); return true; } catch (e) { return false; }
-            };
-            const parseJson = (raw, fallback) => {
-                if (!raw) return fallback;
-                try { return JSON.parse(raw); } catch (e) { return fallback; }
-            };
-            let fallbackIdCounter = 0;
-            const generateId = (prefix = 'id') => {
-                if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
-                const perf = Math.floor((window.performance?.now?.() || 0) * 1000);
-                fallbackIdCounter += 1;
-                return `${prefix}_${Date.now()}_${perf}_${fallbackIdCounter}_${Math.random().toString(16).slice(2, 10)}`;
-            };
-            const isKhLocale = () => (state.settings.locale || 'km-KH').startsWith('km');
-            const t = (kh, en) => isKhLocale() ? kh : en;
-            const getAllCategories = () => [...state.defaultCategories, ...state.customCategories];
-            const randomColor = () => `hsl(${Math.floor(Math.random() * 360)} 70% 60%)`;
-            const sanitizeText = (value, max = 120) => String(value || '').replace(/[<>]/g, '').trim().slice(0, max);
-            const normalizeFrequency = (value) => ['daily', 'weekly', 'monthly'].includes(value) ? value : 'monthly';
-            const isValidExpense = (e) => Number.isFinite(Number(e?.amount)) && Number(e.amount) > 0 && typeof e?.category === 'string' && !Number.isNaN(new Date(e?.date).getTime());
-
-            function render() {
-                state.filteredExpenses = getFilteredExpenses();
-                renderSummaries();
-                renderExpenseHistory();
-                renderCategoriesInDropdown();
-                renderChart();
-                renderAnalytics();
-                renderBudgetAndSavings();
-                renderCustomCategories();
-                renderRecurring();
-                renderSettings();
-                updateStorageUsageUI();
-            }
-
-            function getFilteredExpenses() {
-                const keyword = state.ui.search.trim().toLowerCase();
-                const todayStr = new Date().toISOString().slice(0, 10);
-                const monthPrefix = todayStr.slice(0, 7);
-                const filtered = state.expenses.filter(expense => {
-                    const noteText = (expense.notes || '').toLowerCase();
-                    const category = getAllCategories().find(c => c.id === expense.category);
-                    const categoryName = (category?.name || '').toLowerCase();
-                    const matchesKeyword = !keyword || noteText.includes(keyword) || categoryName.includes(keyword);
-                    const dateOnly = expense.date.slice(0, 10);
-                    const matchesPeriod = state.ui.periodFilter === 'all'
-                        || (state.ui.periodFilter === 'today' && dateOnly === todayStr)
-                        || (state.ui.periodFilter === 'month' && dateOnly.startsWith(monthPrefix));
-                    return matchesKeyword && matchesPeriod;
-                });
-                const sorters = {
-                    date_desc: (a, b) => new Date(b.date) - new Date(a.date),
-                    date_asc: (a, b) => new Date(a.date) - new Date(b.date),
-                    amount_desc: (a, b) => b.amount - a.amount,
-                    amount_asc: (a, b) => a.amount - b.amount,
-                };
-                return filtered.sort(sorters[state.ui.sortBy] || sorters.date_desc);
-            }
-
-            function renderSummaries() {
-                const now = new Date();
-                const todayStr = now.toISOString().slice(0, 10);
-                const startOfWeek = new Date(now);
-                startOfWeek.setDate(now.getDate() - (now.getDay() || 7) + 1);
-                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-                const totalToday = state.expenses.filter(e => e.date.startsWith(todayStr)).reduce((s, e) => s + e.amount, 0);
-                const totalWeek = state.expenses.filter(e => new Date(e.date) >= startOfWeek).reduce((s, e) => s + e.amount, 0);
-                const totalMonth = state.expenses.filter(e => new Date(e.date) >= startOfMonth).reduce((s, e) => s + e.amount, 0);
-
-                totalTodayEl.textContent = formatCurrency(totalToday);
-                totalWeekEl.textContent = formatCurrency(totalWeek);
-                totalMonthEl.textContent = formatCurrency(totalMonth);
-            }
-
-            function renderChart() {
-                const now = new Date();
-                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                const monthlyExpenses = state.expenses.filter(e => new Date(e.date) >= startOfMonth);
-                const categoryTotals = getAllCategories().map(cat => ({
-                    ...cat,
-                    total: monthlyExpenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0)
-                })).filter(cat => cat.total > 0);
-
-                if (state.chartInstance) state.chartInstance.destroy();
-                state.chartInstance = new Chart(chartCanvas, {
-                    type: 'pie', data: {
-                        labels: categoryTotals.map(c => c.name),
-                        datasets: [{
-                            data: categoryTotals.map(c => c.total),
-                            backgroundColor: categoryTotals.map(c => c.color),
-                            borderColor: 'var(--secondary-bg-color)', borderWidth: 2
-                        }]
-                    }, options: { responsive: true, plugins: { legend: { position: 'right', labels: { font: { family: "'Kantumruy Pro', sans-serif" } } } } }
-                });
-            }
-
-            function renderExpenseHistory() {
-                sectionTransactions.querySelector('#history-placeholder')?.remove();
-                sectionTransactions.querySelectorAll('.date-header, .content-card.expense-list-container').forEach(el => el.remove());
-                
-                if (state.filteredExpenses.length === 0) {
-                    sectionTransactions.insertAdjacentElement('beforeend', historyPlaceholder);
-                    return;
-                }
-
-                const grouped = state.filteredExpenses.reduce((acc, expense) => {
-                    const date = expense.date.slice(0, 10);
-                    if (!acc[date]) acc[date] = []; acc[date].push(expense); return acc;
-                }, {});
-
-                const sortedDates = Object.keys(grouped).sort((a,b) => new Date(b) - new Date(a));
-                const todayStr = new Date().toISOString().slice(0, 10);
-                const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-                const yesterdayStr = yesterday.toISOString().slice(0, 10);
-
-                sortedDates.forEach(dateStr => {
-                    let label = (dateStr === todayStr) ? 'ថ្ងៃនេះ' : (dateStr === yesterdayStr) ? 'ម្សិលមិញ' : new Date(dateStr).toLocaleDateString(state.settings.locale || 'km-KH', { day: 'numeric', month: 'long', year: 'numeric' });
-                    
-                    const dateHeader = document.createElement('h2');
-                    dateHeader.className = 'date-header text-lg'; dateHeader.textContent = label;
-                    sectionTransactions.appendChild(dateHeader);
-
-                    const listContainer = document.createElement('div');
-                    listContainer.className = 'content-card expense-list-container';
-                    
-                    grouped[dateStr].sort((a,b) => new Date(b.date) - new Date(a.date)).forEach(expense => {
-                        const category = getAllCategories().find(c => c.id === expense.category);
-                        const item = document.createElement('div');
-                        item.className = 'list-item'; item.dataset.id = expense.id;
-                        item.innerHTML = `
-                            <div class="text-2xl mr-4">${category?.icon || '💸'}</div>
-                            <div class="flex-grow">
-                                <p class="font-semibold">${category?.name || 'ប្រភេទ​ដែល​បាន​លុប'}</p>
-                                ${expense.notes ? `<p class="text-sm" style="color: var(--hint-color);">${expense.notes}</p>` : ''}
-                            </div>
-                            <div class="font-semibold text-right">${formatCurrency(expense.amount)}</div>`;
-                        listContainer.appendChild(item);
-                    });
-                    sectionTransactions.appendChild(listContainer);
-                });
-            }
-            
-            function renderCategoriesInDropdown() {
-                categorySelect.innerHTML = '<option value="" disabled>-- ជ្រើសរើសប្រភេទ --</option>';
-                recurringCategorySelect.innerHTML = '<option value="" disabled selected>Choose category</option>';
-                getAllCategories().forEach(cat => {
-                    categorySelect.innerHTML += `<option value="${cat.id}">${cat.icon} ${cat.name}</option>`;
-                    recurringCategorySelect.innerHTML += `<option value="${cat.id}">${cat.icon} ${cat.name}</option>`;
-                });
-            }
-
-            function renderAnalytics() {
-                const total = state.expenses.length;
-                const totalAmount = state.expenses.reduce((s, e) => s + e.amount, 0);
-                const avg = total ? totalAmount / total : 0;
-                const largest = state.expenses.reduce((m, e) => Math.max(m, e.amount), 0);
-                const top = getAllCategories().map(cat => ({
-                    ...cat,
-                    total: state.expenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0)
-                })).sort((a, b) => b.total - a.total)[0];
-                analyticsTotalTransactions.textContent = `${total}`;
-                analyticsAvgTransaction.textContent = formatCurrency(avg);
-                analyticsLargestExpense.textContent = formatCurrency(largest);
-                analyticsTopCategory.textContent = top?.total ? `${top.icon} ${top.name}` : '-';
-            }
-
-            function renderBudgetAndSavings() {
-                const now = new Date();
-                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                const spentThisMonth = state.expenses.filter(e => new Date(e.date) >= startOfMonth).reduce((s, e) => s + e.amount, 0);
-                const monthlyBudget = Number(state.budget.monthly || 0);
-                const remaining = monthlyBudget - spentThisMonth;
-                budgetStatusText.textContent = monthlyBudget > 0
-                    ? `Budget: ${formatCurrency(monthlyBudget)} | Spent: ${formatCurrency(spentThisMonth)} | Remaining: ${formatCurrency(remaining)}`
-                    : `Budget not set yet. Spent this month: ${formatCurrency(spentThisMonth)}`;
-                const target = Number(state.savingsGoal.target || 0);
-                const saved = Number(state.savingsGoal.saved || 0);
-                const progress = target > 0 ? Math.min((saved / target) * 100, 100).toFixed(1) : 0;
-                savingsStatusText.textContent = target > 0
-                    ? `Goal: ${formatCurrency(target)} | Saved: ${formatCurrency(saved)} (${progress}%)`
-                    : 'Savings goal not set yet.';
-            }
-
-            function renderCustomCategories() {
-                customCategoriesList.innerHTML = '';
-                if (state.customCategories.length === 0) {
-                    customCategoriesList.innerHTML = `<p style="color: var(--hint-color);">No custom categories yet.</p>`;
-                    return;
-                }
-                state.customCategories.forEach(cat => {
-                    const row = document.createElement('div');
-                    row.className = 'flex items-center justify-between p-2 rounded-lg';
-                    row.style.backgroundColor = 'var(--bg-color)';
-                    row.innerHTML = `<span>${cat.icon} ${cat.name}</span><button data-remove-category-id="${cat.id}" class="text-sm" style="color: var(--danger-color);">Remove</button>`;
-                    customCategoriesList.appendChild(row);
-                });
-            }
-
-            function renderRecurring() {
-                recurringList.innerHTML = '';
-                if (state.recurringItems.length === 0) {
-                    recurringList.innerHTML = `<p style="color: var(--hint-color);">No recurring items yet.</p>`;
-                    return;
-                }
-                state.recurringItems.forEach(item => {
-                    const category = getAllCategories().find(c => c.id === item.category);
-                    const row = document.createElement('div');
-                    row.className = 'flex items-center justify-between p-2 rounded-lg';
-                    row.style.backgroundColor = 'var(--bg-color)';
-                    row.innerHTML = `
-                        <div>
-                            <p class="font-semibold">${item.name}</p>
-                            <p style="color: var(--hint-color);">${formatCurrency(item.amount)} • ${item.frequency} • ${category?.name || 'Unknown'}</p>
-                        </div>
-                        <div class="flex gap-2">
-                            <button data-run-recurring-id="${item.id}" class="text-xs px-2 py-1 rounded" style="background-color: var(--button-color); color: var(--button-text-color);">Run</button>
-                            <button data-remove-recurring-id="${item.id}" class="text-xs px-2 py-1 rounded" style="background-color: var(--danger-color); color: var(--button-text-color);">Del</button>
-                        </div>`;
-                    recurringList.appendChild(row);
-                });
-            }
-
-            function renderSettings() {
-                budgetInput.value = state.budget.monthly || '';
-                savingsTargetInput.value = state.savingsGoal.target || '';
-                savingsCurrentInput.value = state.savingsGoal.saved || '';
-                currencySelect.value = state.settings.currency || 'KHR';
-                localeSelect.value = state.settings.locale || 'km-KH';
-                deleteConfirmCheckbox.checked = state.settings.requireDeleteConfirm !== false;
-                sortSelect.value = state.ui.sortBy;
-                saveBudgetBtn.textContent = t('រក្សាទុកថវិកា', 'Save Budget');
-                saveSavingsBtn.textContent = t('រក្សាទុកគោលដៅ', 'Save Goal');
-                const navText = {
-                    dashboard: t('ទំព័រដើម', 'Home'),
-                    transactions: t('ប្រតិបត្តិការ', 'Transactions'),
-                    analytics: t('វិភាគ', 'Analytics'),
-                    manage: t('គ្រប់គ្រង', 'Manage'),
-                };
-                navButtons.forEach((btn) => {
-                    const label = btn.querySelector('span:last-child');
-                    if (label) label.textContent = navText[btn.dataset.section] || btn.dataset.section;
-                });
-            }
-
-            function setActiveSection(sectionName) {
-                state.ui.activeSection = sectionName;
-                sectionDashboard.classList.toggle('hidden', sectionName !== 'dashboard');
-                sectionTransactions.classList.toggle('hidden', sectionName !== 'transactions');
-                sectionAnalytics.classList.toggle('hidden', sectionName !== 'analytics');
-                sectionManage.classList.toggle('hidden', sectionName !== 'manage');
-                navButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.section === sectionName));
-                const showFab = sectionName === 'dashboard' || sectionName === 'transactions';
-                fab.style.opacity = showFab ? '1' : '0';
-                fab.style.pointerEvents = showFab ? 'auto' : 'none';
-            }
-
-            function getAuxDataPayload() {
-                return JSON.stringify({
-                    customCategories: state.customCategories,
-                    recurringItems: state.recurringItems,
-                    budget: state.budget,
-                    savingsGoal: state.savingsGoal,
-                    settings: state.settings,
-                });
-            }
-
-            function saveAuxData() {
-                const payload = getAuxDataPayload();
-                safeLocalAuxSet(payload);
-                if (isCloudAvailable()) {
-                    tg.CloudStorage.setItem('auxData', payload, () => {});
-                }
-            }
-
-            function updateStorageUsageUI(notify = false, usedBytes = null) {
-                const bytes = usedBytes ?? new TextEncoder().encode(JSON.stringify(state.expenses)).length;
-                const usageRatio = Math.min(bytes / CLOUD_SOFT_LIMIT_BYTES, 1);
-                const usagePercent = usageRatio === 0 ? 0 : Math.max(usageRatio * 100, MIN_STORAGE_BAR_PERCENT);
-                storageUsageFill.style.width = `${usagePercent}%`;
-                storageUsageText.textContent = `${formatStorage(bytes)} / ${formatStorage(CLOUD_SOFT_LIMIT_BYTES)}`;
-                storageModeText.textContent = state.storageMode === 'cloud'
-                    ? 'Storage: Telegram Cloud'
-                    : state.storageMode === 'local'
-                        ? 'Storage: Local backup mode'
-                        : 'Storage: Checking...';
-                if (usageRatio >= 1) {
-                    storageWarningText.textContent = 'Cloud limit reached';
-                    if (notify) safeAlert('Cloud Storage is full. App will continue using local backup storage.');
-                } else if (usageRatio >= STORAGE_WARNING_THRESHOLD) {
-                    storageWarningText.textContent = 'Nearly full';
-                    if (notify) safeAlert('Storage is almost full. Consider removing old records.');
-                } else {
-                    storageWarningText.textContent = 'Healthy';
-                }
-            }
-
-            // --- Modals ---
-            function openModal(expense = null) {
-                if (expense) {
-                    modalTitle.textContent = 'កែសម្រួលចំណាយ';
-                    amountInput.value = expense.amount;
-                    categorySelect.value = expense.category;
-                    notesInput.value = expense.notes;
-                    dateInput.value = expense.date.slice(0, 10);
-                    expenseIdInput.value = expense.id;
-                    tg.MainButton.setText('ធ្វើបច្ចុប្បន្នភាព');
-                } else {
-                    modalTitle.textContent = 'បន្ថែមចំណាយថ្មី';
-                    expenseForm.reset();
-                    renderCategoriesInDropdown();
-                    dateInput.value = new Date().toISOString().slice(0, 10);
-                    expenseIdInput.value = '';
-                    tg.MainButton.setText('រក្សាទុកចំណាយ');
-                }
-                modalOverlay.classList.remove('hidden');
-                modalContent.classList.add('open');
-                tg.MainButton.show();
-                tg.HapticFeedback.impactOccurred('light');
-            }
-
-            function closeModal() {
-                modalOverlay.classList.add('hidden');
-                modalContent.classList.remove('open');
-                tg.MainButton.hide();
-            }
-
-            function openReportModal() {
-                reportModalOverlay.classList.remove('hidden');
-                reportModalContent.classList.add('open');
-                tg.HapticFeedback.impactOccurred('light');
-            }
-
-            function closeReportModalFunc() {
-                reportModalOverlay.classList.add('hidden');
-                reportModalContent.classList.remove('open');
-            }
-
-            function getDateRange(period) {
-                const now = new Date();
-                let startDate, endDate, periodLabel;
-
-                switch(period) {
-                    case 'today':
-                        startDate = new Date(now.setHours(0, 0, 0, 0));
-                        endDate = new Date(now.setHours(23, 59, 59, 999));
-                        periodLabel = 'ថ្ងៃនេះ';
-                        break;
-                    case 'yesterday':
-                        const yesterday = new Date(now);
-                        yesterday.setDate(yesterday.getDate() - 1);
-                        startDate = new Date(yesterday.setHours(0, 0, 0, 0));
-                        endDate = new Date(yesterday.setHours(23, 59, 59, 999));
-                        periodLabel = 'ម្សិលមិញ';
-                        break;
-                    case 'week':
-                        startDate = new Date(now);
-                        startDate.setDate(now.getDate() - (now.getDay() || 7) + 1);
-                        startDate.setHours(0, 0, 0, 0);
-                        endDate = new Date(now.setHours(23, 59, 59, 999));
-                        periodLabel = 'សប្តាហ៍នេះ';
-                        break;
-                    case 'last-week':
-                        const lastWeekEnd = new Date(now);
-                        lastWeekEnd.setDate(now.getDate() - (now.getDay() || 7));
-                        lastWeekEnd.setHours(23, 59, 59, 999);
-                        startDate = new Date(lastWeekEnd);
-                        startDate.setDate(lastWeekEnd.getDate() - 6);
-                        startDate.setHours(0, 0, 0, 0);
-                        endDate = lastWeekEnd;
-                        periodLabel = 'សប្តាហ៍មុន';
-                        break;
-                    case 'month':
-                        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                        endDate = new Date(now.setHours(23, 59, 59, 999));
-                        periodLabel = now.toLocaleDateString(state.settings.locale || 'km-KH', {month: 'long', year: 'numeric'});
-                        break;
-                    case 'last-month':
-                        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                        endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-                        periodLabel = startDate.toLocaleDateString(state.settings.locale || 'km-KH', {month: 'long', year: 'numeric'});
-                        break;
-                    case 'all':
-                        startDate = new Date(0);
-                        endDate = new Date(now.setHours(23, 59, 59, 999));
-                        periodLabel = 'ទាំងអស់';
-                        break;
-                    default:
-                        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                        endDate = new Date(now.setHours(23, 59, 59, 999));
-                        periodLabel = 'ខែនេះ';
-                }
-
-                return { startDate, endDate, periodLabel };
-            }
-
-            function generateDetailedReport() {
-                if (state.expenses.length === 0) {
-                    tg.showAlert('មិនមានទិន្នន័យសម្រាប់បង្កើតរបាយការណ៍ទេ។');
-                    return;
-                }
-
-                const period = reportPeriodSelect.value;
-                const { startDate, endDate, periodLabel } = getDateRange(period);
-                
-                const filteredExpenses = state.expenses.filter(e => {
-                    const expenseDate = new Date(e.date);
-                    return expenseDate >= startDate && expenseDate <= endDate;
-                });
-
-                if (filteredExpenses.length === 0) {
-                    tg.showAlert('មិនមានទិន្នន័យសម្រាប់រយៈពេលនេះទេ។');
-                    closeReportModalFunc();
-                    return;
-                }
-
-                const totalAmount = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
-                const transactionCount = filteredExpenses.length;
-                
-                // Calculate days in period
-                const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-                const avgPerDay = totalAmount / daysDiff;
-                const avgPerTransaction = totalAmount / transactionCount;
-                
-                const categoryTotals = getAllCategories().map(cat => ({
-                    ...cat,
-                    total: filteredExpenses.filter(e => e.category === cat.id).reduce((s, e) => s + e.amount, 0),
-                    count: filteredExpenses.filter(e => e.category === cat.id).length
-                })).filter(cat => cat.total > 0);
-
-                // Find highest and lowest expense
-                const sortedExpenses = [...filteredExpenses].sort((a, b) => b.amount - a.amount);
-                const highestExpense = sortedExpenses[0];
-                const lowestExpense = sortedExpenses[sortedExpenses.length - 1];
-                const highestCategory = getAllCategories().find(c => c.id === highestExpense.category);
-                const lowestCategory = getAllCategories().find(c => c.id === lowestExpense.category);
-
-                let report = `📊 របាយការណ៍ចំណាយ - ${periodLabel}\n`;
-                report += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-                
-                report += `💰 ចំណាយសរុប៖ ${formatCurrency(totalAmount)}\n`;
-                report += `📝 ចំនួនប្រតិបត្តិការ៖ ${transactionCount}\n`;
-                report += `📅 រយៈពេល៖ ${daysDiff} ថ្ងៃ\n`;
-                report += `📊 មធ្យមភាគក្នុងមួយថ្ងៃ៖ ${formatCurrency(avgPerDay)}\n`;
-                report += `💳 មធ្យមភាគក្នុងមួយប្រតិបត្តិការ៖ ${formatCurrency(avgPerTransaction)}\n\n`;
-                
-                report += `📋 ចំណាយតាមប្រភេទ៖\n`;
-                report += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                categoryTotals.sort((a, b) => b.total - a.total).forEach(cat => {
-                    const percentage = ((cat.total / totalAmount) * 100).toFixed(1);
-                    report += `${cat.icon} ${cat.name}\n`;
-                    report += `   ចំនួនទឹកប្រាក់៖ ${formatCurrency(cat.total)} (${percentage}%)\n`;
-                    report += `   ចំនួនដង៖ ${cat.count}\n\n`;
-                });
-
-                report += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-                report += `🔝 ចំណាយខ្ពស់បំផុត៖\n`;
-                report += `   ${formatCurrency(highestExpense.amount)} - ${highestCategory?.icon} ${highestCategory?.name}\n`;
-                if (highestExpense.notes) report += `   "${highestExpense.notes}"\n`;
-                
-                report += `\n🔻 ចំណាយទាបបំផុត៖\n`;
-                report += `   ${formatCurrency(lowestExpense.amount)} - ${lowestCategory?.icon} ${lowestCategory?.name}\n`;
-                if (lowestExpense.notes) report += `   "${lowestExpense.notes}"\n`;
-
-                closeReportModalFunc();
-
-                // Show the report in the Mini App first
-                tg.showPopup({
-                    title: 'របាយការណ៍ចំណាយ',
-                    message: report.substring(0, 200) + '...\n\nចុច "ផ្ញើទៅ Chat" ដើម្បីមើលរបាយការណ៍ពេញលេញ',
-                    buttons: [
-                        {id: 'send', type: 'default', text: 'ផ្ញើទៅ Chat'},
-                        {type: 'cancel', text: 'បិទ'}
-                    ]
-                }, (buttonId) => {
-                    if (buttonId === 'send') {
-                        const initData = tg.initData;
-                        fetch('/api/send-report', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                initData: initData,
-                                report: report
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
-                                tg.showAlert('✅ របាយការណ៍ត្រូវបានផ្ញើដោយជោគជ័យ!');
-                                tg.HapticFeedback.notificationOccurred('success');
-                            } else {
-                                tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            tg.showAlert('❌ មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍');
-                        });
-                    }
-                });
-            }
-
-            // --- Data Handling ---
-            function handleFormSubmit() {
-                const amount = parseFloat(amountInput.value);
-                if (isNaN(amount) || amount <= 0 || !categorySelect.value || !dateInput.value) {
-                    safeAlert('សូមបំពេញគ្រប់ច្រកទាំងអស់។'); return;
-                }
-                tg.MainButton.showProgress();
-                const id = expenseIdInput.value;
-                const date = new Date(dateInput.value).toISOString();
-                if (id) {
-                    const index = state.expenses.findIndex(e => e.id === id);
-                    if (index > -1) state.expenses[index] = { ...state.expenses[index], amount, category: categorySelect.value, notes: notesInput.value.trim(), date };
-                } else {
-                    state.expenses.push({ id: generateId(), amount, category: categorySelect.value, notes: notesInput.value.trim(), date });
-                }
-                saveDataToCloud(() => { render(); closeModal(); tg.MainButton.hideProgress(); tg.HapticFeedback.notificationOccurred('success'); });
-            }
-            
-            function deleteExpense(id) {
-                const proceed = () => {
-                    state.expenses = state.expenses.filter(e => e.id !== id);
-                    saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
-                };
-                if (state.settings.requireDeleteConfirm === false) {
-                    proceed();
-                    return;
-                }
-                tg.showConfirm('តើអ្នកពិតជាចង់លុបការចំណាយនេះមែនទេ?', (confirmed) => {
-                    if (confirmed) proceed();
-                });
-            }
-
-            function duplicateExpense(id) {
-                const source = state.expenses.find(e => e.id === id);
-                if (!source) return;
-                state.expenses.push({
-                    id: generateId(),
-                    amount: source.amount,
-                    category: source.category,
-                    notes: source.notes ? `${source.notes} (copy)` : 'Copied expense',
-                    date: new Date().toISOString()
-                });
-                saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
-            }
-
-            function isRecurringDue(item) {
-                if (!item.lastAppliedDate) return true;
-                const last = new Date(item.lastAppliedDate);
-                const now = new Date();
-                if (item.frequency === 'daily') return now.toDateString() !== last.toDateString();
-                if (item.frequency === 'weekly') return Math.floor((now - last) / (24 * 60 * 60 * 1000)) >= 7;
-                if (item.frequency === 'monthly') return now.getMonth() !== last.getMonth() || now.getFullYear() !== last.getFullYear();
-                return false;
-            }
-
-            function runRecurringItem(itemId) {
-                const item = state.recurringItems.find(r => r.id === itemId);
-                if (!item) return;
-                state.expenses.push({
-                    id: generateId(),
-                    amount: Number(item.amount),
-                    category: item.category,
-                    notes: `[Recurring] ${item.name}`,
-                    date: new Date().toISOString()
-                });
-                item.lastAppliedDate = new Date().toISOString();
-                saveAuxData();
-                saveDataToCloud(() => { render(); tg.HapticFeedback.notificationOccurred('success'); });
-            }
-
-            function applyDueRecurringItems() {
-                const dueItems = state.recurringItems.filter(isRecurringDue);
-                if (dueItems.length === 0) {
-                    safeAlert('No recurring expenses are due right now.');
-                    return;
-                }
-                dueItems.forEach(item => {
-                    state.expenses.push({
-                        id: generateId(),
-                        amount: Number(item.amount),
-                        category: item.category,
-                        notes: `[Recurring] ${item.name}`,
-                        date: new Date().toISOString()
-                    });
-                    item.lastAppliedDate = new Date().toISOString();
-                });
-                saveAuxData();
-                saveDataToCloud(() => { render(); safeAlert(`Added ${dueItems.length} recurring expense(s).`); });
-            }
-
-            function addCustomCategory() {
-                const name = categoryNameInput.value.trim();
-                if (!name) {
-                    safeAlert('Please input category name.');
-                    return;
-                }
-                const id = generateId('custom');
-                state.customCategories.push({ id, name, icon: '🏷️', color: randomColor() });
-                categoryNameInput.value = '';
-                saveAuxData();
-                render();
-            }
-
-            function removeCustomCategory(categoryId) {
-                const affectedCount = state.expenses.filter(exp => exp.category === categoryId).length;
-                state.customCategories = state.customCategories.filter(c => c.id !== categoryId);
-                state.expenses = state.expenses.map(exp => exp.category === categoryId ? { ...exp, category: DEFAULT_CATEGORY_ID } : exp);
-                saveAuxData();
-                saveDataToCloud(() => {
-                    render();
-                    if (affectedCount > 0) safeAlert(t(`បានប្ដូរចំណាយ ${affectedCount} ទៅប្រភេទ "ផ្សេងៗ"។`, `${affectedCount} expense(s) were reassigned to "Other".`));
-                });
-            }
-
-            function addRecurringItem() {
-                const name = recurringNameInput.value.trim();
-                const amount = parseFloat(recurringAmountInput.value);
-                const category = recurringCategorySelect.value;
-                const frequency = recurringFrequencySelect.value;
-                if (!name || isNaN(amount) || amount <= 0 || !category || !frequency) {
-                    safeAlert('Please fill recurring expense fields.');
-                    return;
-                }
-                state.recurringItems.push({
-                    id: generateId(),
-                    name: sanitizeText(name, 80),
-                    amount,
-                    category,
-                    frequency: normalizeFrequency(frequency),
-                    lastAppliedDate: null
-                });
-                recurringNameInput.value = '';
-                recurringAmountInput.value = '';
-                recurringCategorySelect.value = '';
-                saveAuxData();
-                render();
-            }
-
-            function removeRecurringItem(itemId) {
-                state.recurringItems = state.recurringItems.filter(r => r.id !== itemId);
-                saveAuxData();
-                render();
-            }
-
-            function clearFilters() {
-                state.ui.search = '';
-                state.ui.periodFilter = 'all';
-                state.ui.sortBy = 'date_desc';
-                searchInput.value = '';
-                sortSelect.value = 'date_desc';
-                filterChips.forEach(btn => btn.classList.toggle('active', btn.dataset.periodFilter === 'all'));
-                render();
-            }
-
-            function resetThisMonthData() {
-                tg.showConfirm(t('លុបចំណាយប្រចាំខែនេះទាំងអស់?', 'Reset all expenses in this month?'), (ok) => {
-                    if (!ok) return;
-                    const monthPrefix = new Date().toISOString().slice(0, 7);
-                    state.expenses = state.expenses.filter(e => !e.date.startsWith(monthPrefix));
-                    saveDataToCloud(() => render());
-                });
-            }
-
-            function saveBudgetAndSavings() {
-                state.budget.monthly = Number(budgetInput.value || 0);
-                state.savingsGoal.target = Number(savingsTargetInput.value || 0);
-                state.savingsGoal.saved = Number(savingsCurrentInput.value || 0);
-                saveAuxData();
-                render();
-            }
-
-            function saveSettings() {
-                state.settings.currency = currencySelect.value || 'KHR';
-                state.settings.locale = localeSelect.value || 'km-KH';
-                state.settings.requireDeleteConfirm = deleteConfirmCheckbox.checked;
-                saveAuxData();
-                render();
-            }
-
-            function exportData() {
-                const payload = {
-                    exportedAt: new Date().toISOString(),
-                    expenses: state.expenses,
-                    customCategories: state.customCategories,
-                    recurringItems: state.recurringItems,
-                    budget: state.budget,
-                    savingsGoal: state.savingsGoal,
-                    settings: state.settings
-                };
-                const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `yi-spending-backup-${new Date().toISOString().slice(0, 10)}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-            }
-
-            function importDataFromFile(file) {
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = () => {
-                    try {
-                        const parsed = JSON.parse(reader.result);
-                        const validExpenses = Array.isArray(parsed.expenses) ? parsed.expenses
-                            .filter(isValidExpense)
-                            .map(e => ({
-                                id: sanitizeText(e.id || generateId(), 80),
-                                amount: Number(e.amount),
-                                category: sanitizeText(e.category, 80) || DEFAULT_CATEGORY_ID,
-                                notes: sanitizeText(e.notes || '', 200),
-                                date: new Date(e.date).toISOString()
-                            })) : [];
-                        const validCustomCategories = Array.isArray(parsed.customCategories) ? parsed.customCategories
-                            .filter(c => typeof c.name === 'string' && c.name.trim())
-                            .map(c => ({
-                                id: sanitizeText(c.id || generateId('custom'), 80),
-                                name: sanitizeText(c.name, 60),
-                                icon: sanitizeText(c.icon || '🏷️', 4),
-                                color: sanitizeText(c.color || randomColor(), 24),
-                            })) : [];
-                        const validRecurring = Array.isArray(parsed.recurringItems) ? parsed.recurringItems
-                            .filter(r => Number.isFinite(Number(r.amount)) && Number(r.amount) > 0 && typeof r.category === 'string' && typeof r.name === 'string')
-                            .map(r => ({
-                                id: sanitizeText(r.id || generateId(), 80),
-                                name: sanitizeText(r.name, 80),
-                                amount: Number(r.amount),
-                                category: sanitizeText(r.category, 80),
-                                frequency: normalizeFrequency(r.frequency),
-                                lastAppliedDate: (() => {
-                                    const recurringDate = r.lastAppliedDate ? new Date(r.lastAppliedDate) : null;
-                                    return recurringDate && !Number.isNaN(recurringDate.getTime()) ? recurringDate.toISOString() : null;
-                                })()
-                            })) : [];
-                        state.expenses = validExpenses;
-                        state.customCategories = validCustomCategories;
-                        state.recurringItems = validRecurring;
-                        state.budget = parsed.budget || { monthly: 0 };
-                        state.savingsGoal = parsed.savingsGoal || { target: 0, saved: 0 };
-                        state.settings = { ...state.settings, ...(parsed.settings || {}) };
-                        saveAuxData();
-                        saveDataToCloud(() => { render(); safeAlert('Import successful.'); });
-                    } catch (e) {
-                        safeAlert('Invalid JSON backup file.');
-                    }
-                };
-                reader.readAsText(file);
-            }
-
-            function saveDataToCloud(callback) {
-                const dataToSave = JSON.stringify(state.expenses);
-                const runCallback = () => {
-                    updateStorageUsageUI();
-                    if (callback) callback();
-                };
-
-                if (!isCloudAvailable()) {
-                    state.storageMode = 'local';
-                    safeLocalStorageSet(dataToSave);
-                    runCallback();
-                    return;
-                }
-
-                const bytes = new TextEncoder().encode(dataToSave).length;
-                if (bytes > CLOUD_SOFT_LIMIT_BYTES) {
-                    state.storageMode = 'local';
-                    safeLocalStorageSet(dataToSave);
-                    updateStorageUsageUI(true, bytes);
-                    runCallback();
-                    return;
-                }
-
-                tg.CloudStorage.setItem('expenses', dataToSave, (error) => {
-                    if (error) {
-                        state.storageMode = 'local';
-                        safeLocalStorageSet(dataToSave);
-                        safeAlert('Cloud Storage មានបញ្ហា។ កម្មវិធីបានប្ដូរទៅ Local Storage បណ្តោះអាសន្ន។');
-                    } else {
-                        state.storageMode = 'cloud';
-                        if (!safeLocalStorageSet(dataToSave)) {
-                            console.warn('Failed to save backup to localStorage - quota may be exceeded or storage may be disabled.');
-                        }
-                    }
-                    runCallback();
-                });
-            }
-
-            function loadInitialData() {
-                const user = tg.initDataUnsafe?.user;
-                if (user) welcomeMessageEl.textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
-
-                if (!isCloudAvailable()) {
-                    state.storageMode = 'local';
-                    loadExpenses(safeLocalStorageGet(), safeLocalAuxGet());
-                    safeAlert('Telegram កំណែរបស់អ្នកចាស់ពេក ឬ Cloud Storage មិនអាចប្រើបាន។ កម្មវិធីនឹងប្រើ Local Storage។');
-                    return;
-                }
-
-                tg.CloudStorage.getItems(['expenses', 'termsAccepted', 'auxData'], (error, values) => {
-                    if (error) { 
-                        state.storageMode = 'local';
-                        loadExpenses(safeLocalStorageGet(), safeLocalAuxGet());
-                        safeAlert(`Error loading cloud data: ${error}. Switched to local backup.`); 
-                        return; 
-                    }
-
-                    if (!values.termsAccepted) {
-                        tg.showConfirm(
-                            "សូមស្វាគមន៍! កម្មវិធីនេះរក្សាទុកទិន្នន័យចំណាយរបស់អ្នកដោយសុវត្ថិភាពនៅក្នុង Telegram Cloud Storage និងមាន Local Backup។ តើអ្នកយល់ព្រមទេ?",
-                            (ok) => ok ? tg.CloudStorage.setItem('termsAccepted', 'true', () => loadExpenses(values.expenses, values.auxData)) : tg.close()
-                        );
-                    } else { 
-                        loadExpenses(values.expenses, values.auxData); 
-                    }
-                });
-            }
-            
-            function loadExpenses(storedValue, auxStoredValue) {
-                 const localValue = safeLocalStorageGet();
-                 const localAuxValue = safeLocalAuxGet();
-                 const preferredValue = storedValue ?? localValue;
-                 const preferredAuxValue = auxStoredValue ?? localAuxValue;
-                 if (preferredValue) {
-                    try {
-                        const parsed = JSON.parse(preferredValue);
-                        state.expenses = Array.isArray(parsed) ? parsed : [];
-                    } catch (e) {
-                        state.expenses = [];
-                    }
-                 }
-                 const auxParsed = parseJson(preferredAuxValue, {});
-                 state.customCategories = Array.isArray(auxParsed.customCategories) ? auxParsed.customCategories : [];
-                 state.recurringItems = Array.isArray(auxParsed.recurringItems) ? auxParsed.recurringItems : [];
-                 state.budget = auxParsed.budget || { monthly: 0 };
-                 state.savingsGoal = auxParsed.savingsGoal || { target: 0, saved: 0 };
-                 state.settings = { ...state.settings, ...(auxParsed.settings || {}) };
-                 state.storageMode = isCloudAvailable() ? 'cloud' : 'local';
-                 const serializedExpenses = JSON.stringify(state.expenses);
-                 if (storedValue !== null && storedValue !== undefined) {
-                    safeLocalStorageSet(serializedExpenses);
-                 } else if (!localValue && state.expenses.length > 0) {
-                    safeLocalStorageSet(serializedExpenses);
-                 }
-                 safeLocalAuxSet(getAuxDataPayload());
-                 render();
-                 setActiveSection('dashboard');
-            }
-
-            // --- Event Listeners & Final Setup ---
-            tg.expand();
-            applyTheme();
-            tg.onEvent('themeChanged', applyTheme);
-            tg.onEvent('mainButtonClicked', handleFormSubmit);
-
-            fab.addEventListener('click', () => openModal());
-            modalOverlay.addEventListener('click', closeModal);
-            reportModalOverlay.addEventListener('click', closeReportModalFunc);
-            navButtons.forEach(btn => btn.addEventListener('click', () => setActiveSection(btn.dataset.section)));
-
-            mainContent.addEventListener('click', (e) => {
-                const item = e.target.closest('.list-item');
-                if (item) {
-                    const expense = state.expenses.find(ex => ex.id === item.dataset.id);
-                    if (expense) {
-                        tg.showPopup({ title: t('ជ្រើសរើសសកម្មភាព', 'Choose action'), message: `${t('ចំណាយលើ', 'Expense')}: "${expense.notes || t('គ្មានកំណត់ចំណាំ', 'No notes')}"`,
-                            buttons: [ {id: 'edit', type: 'default', text: t('កែសម្រួល', 'Edit')}, {id: 'duplicate', type: 'default', text: t('ចម្លង', 'Duplicate')}, {id: 'delete', type: 'destructive', text: t('លុប', 'Delete')}, {type: 'cancel'} ]
-                        }, (buttonId) => {
-                            if (buttonId === 'edit') { openModal(expense); }
-                            else if (buttonId === 'duplicate') { duplicateExpense(expense.id); }
-                            else if (buttonId === 'delete') { deleteExpense(expense.id); }
-                        });
-                    }
-                }
-                const removeCategoryBtn = e.target.closest('[data-remove-category-id]');
-                if (removeCategoryBtn) removeCustomCategory(removeCategoryBtn.dataset.removeCategoryId);
-                const runRecurringBtn = e.target.closest('[data-run-recurring-id]');
-                if (runRecurringBtn) runRecurringItem(runRecurringBtn.dataset.runRecurringId);
-                const removeRecurringBtn = e.target.closest('[data-remove-recurring-id]');
-                if (removeRecurringBtn) removeRecurringItem(removeRecurringBtn.dataset.removeRecurringId);
-            });
-
-            generateReportBtn.addEventListener('click', openReportModal);
-            generateReportConfirm.addEventListener('click', generateDetailedReport);
-            closeReportModal.addEventListener('click', closeReportModalFunc);
-            checkStorageBtn.addEventListener('click', () => updateStorageUsageUI(true));
-            checkStorageBtn2.addEventListener('click', () => updateStorageUsageUI(true));
-            addCategoryBtn.addEventListener('click', addCustomCategory);
-            addRecurringBtn.addEventListener('click', addRecurringItem);
-            applyRecurringBtn.addEventListener('click', applyDueRecurringItems);
-            clearFiltersBtn.addEventListener('click', clearFilters);
-            resetMonthBtn.addEventListener('click', resetThisMonthData);
-            saveBudgetBtn.addEventListener('click', saveBudgetAndSavings);
-            saveSavingsBtn.addEventListener('click', saveBudgetAndSavings);
-            exportDataBtn.addEventListener('click', exportData);
-            importDataBtn.addEventListener('click', () => importDataInput.click());
-            importDataInput.addEventListener('change', (e) => importDataFromFile(e.target.files?.[0]));
-            saveSettingsBtn.addEventListener('click', saveSettings);
-            sortSelect.addEventListener('change', (e) => {
-                state.ui.sortBy = e.target.value;
-                render();
-            });
-            searchInput.addEventListener('input', (e) => {
-                state.ui.search = e.target.value;
-                render();
-            });
-            filterChips.forEach(chip => {
-                chip.addEventListener('click', () => {
-                    state.ui.periodFilter = chip.dataset.periodFilter;
-                    filterChips.forEach(btn => btn.classList.toggle('active', btn === chip));
-                    render();
-                });
-            });
-
-            loadInitialData();
+        } else {
+            state.expenses.push({ id: uid(), amount, category: cat, notes, date: dateISO });
         }
 
-        // --- Robust App Starter ---
-        document.addEventListener('DOMContentLoaded', () => {
-            if (!window.Telegram || !window.Telegram.WebApp) {
-                document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">សូមបើកកម្មវិធីនេះនៅក្នុង Telegram។</div>`; return;
-            }
-            try { window.Telegram.WebApp.ready(); initializeApp(); }
-            catch (e) { console.error(e); document.body.innerHTML = `<div class="h-screen flex items-center justify-center p-4 text-center" style="color: var(--hint-color);">កម្មវិធីមានបញ្ហា: ${e.message}</div>`; }
+        closeSheet(expOverlay, expSheet);
+        persistExpenses(() => {
+            renderAll();
+            hapticNotify('success');
         });
-    </script>
+    }
+
+    /* ── Persist ── */
+    function persistExpenses(cb) {
+        const payload = JSON.stringify(state.expenses);
+        lsSet(LS_EXPENSES, payload); // always write local backup first
+
+        if (!isCloudOK()) {
+            state.storageMode = 'local';
+            updateStorageUI();
+            if (cb) cb();
+            return;
+        }
+
+        const bytes = new TextEncoder().encode(payload).length;
+        if (bytes > CLOUD_LIMIT) {
+            state.storageMode = 'local';
+            updateStorageUI(true, bytes);
+            if (cb) cb();
+            return;
+        }
+
+        tg.CloudStorage.setItem('expenses', payload, (err) => {
+            state.storageMode = err ? 'local' : 'cloud';
+            if (err) showAlert('Cloud Storage មានបញ្ហា។ ប្រើ Local Storage ជំនួស។');
+            updateStorageUI();
+            if (cb) cb();
+        });
+    }
+
+    function persistAux() {
+        const payload = JSON.stringify({
+            customCats: state.customCats,
+            recurring: state.recurring,
+            budget: state.budget,
+            savings: state.savings,
+            settings: state.settings,
+        });
+        lsSet(LS_AUX, payload);
+        if (isCloudOK()) tg.CloudStorage.setItem('auxData', payload, () => {});
+    }
+
+    /* ── Load ── */
+    function loadData() {
+        const user = tg.initDataUnsafe?.user;
+        if (user) $('welcome-text').textContent = `សូមស្វាគមន៍, ${user.first_name}!`;
+
+        const loadFromValues = (expStr, auxStr) => {
+            const localExp = lsGet(LS_EXPENSES);
+            const localAux = lsGet(LS_AUX);
+            const expData = expStr ?? localExp;
+            const auxData = auxStr ?? localAux;
+
+            state.expenses = parseJ(expData, []);
+            if (!Array.isArray(state.expenses)) state.expenses = [];
+
+            const aux = parseJ(auxData, {});
+            state.customCats = Array.isArray(aux.customCats) ? aux.customCats : [];
+            state.recurring = Array.isArray(aux.recurring) ? aux.recurring : [];
+            state.budget = aux.budget || { monthly: 0 };
+            state.savings = aux.savings || { target: 0, saved: 0 };
+            if (aux.settings) state.settings = { ...state.settings, ...aux.settings };
+
+            state.storageMode = isCloudOK() ? 'cloud' : 'local';
+            // always sync local backup
+            lsSet(LS_EXPENSES, JSON.stringify(state.expenses));
+            lsSet(LS_AUX, JSON.stringify({ customCats: state.customCats, recurring: state.recurring, budget: state.budget, savings: state.savings, settings: state.settings }));
+
+            renderAll();
+            setSection('home');
+        };
+
+        if (!isCloudOK()) {
+            state.storageMode = 'local';
+            loadFromValues(null, null);
+            return;
+        }
+
+        tg.CloudStorage.getItems(['expenses', 'auxData', 'terms'], (err, vals) => {
+            if (err) {
+                state.storageMode = 'local';
+                loadFromValues(null, null);
+                return;
+            }
+            if (!vals.terms) {
+                showConfirm('កម្មវិធីនេះរក្សាទុកទិន្នន័យរបស់អ្នកនៅក្នុង Telegram Cloud + Local Backup។ តើអ្នកយល់ព្រមទេ?', (ok) => {
+                    if (!ok) { if (typeof tg.close === 'function') tg.close(); return; }
+                    tg.CloudStorage.setItem('terms', '1', () => loadFromValues(vals.expenses, vals.auxData));
+                });
+            } else {
+                loadFromValues(vals.expenses, vals.auxData);
+            }
+        });
+    }
+
+    /* ── Storage UI ── */
+    function updateStorageUI(warn = false, bytes = null) {
+        const b = bytes ?? new TextEncoder().encode(JSON.stringify(state.expenses)).length;
+        const ratio = Math.min(b / CLOUD_LIMIT, 1);
+        const pct = ratio < 0.01 ? 0 : Math.max(ratio * 100, 2);
+        $('storage-fill').style.width = `${pct}%`;
+        $('storage-text').textContent = `${fmtKB(b)} / ${fmtKB(CLOUD_LIMIT)}`;
+        $('storage-mode-label').textContent = state.storageMode === 'cloud' ? '☁️ Telegram Cloud' : state.storageMode === 'local' ? '💾 Local Backup' : '⏳ Checking...';
+        const warnEl = $('storage-warning');
+        if (ratio >= 1) { warnEl.textContent = '⚠️ Full'; warnEl.style.color = 'var(--danger)'; if (warn) showAlert('Cloud Storage ពេញ! App ប្ដូរទៅ Local Storage.'); }
+        else if (ratio >= 0.8) { warnEl.textContent = '⚠️ Nearly Full'; warnEl.style.color = '#ff9500'; if (warn) showAlert('Storage ជិតពេញ! សូមលុបចំណាយចាស់ៗ.'); }
+        else { warnEl.textContent = '✅ Healthy'; warnEl.style.color = 'var(--success)'; }
+    }
+
+    $('btn-check-storage').addEventListener('click', () => updateStorageUI(true));
+
+    /* ── Render all ── */
+    function renderAll() {
+        renderSummary();
+        renderHomeStats();
+        renderTransactions();
+        renderAnalyticsStats();
+        renderBudget();
+        renderCustomCats();
+        renderRecurring();
+        renderSettings();
+        updateStorageUI();
+    }
+
+    /* ── Summary header ── */
+    function renderSummary() {
+        const now = new Date();
+        const todayS = now.toISOString().slice(0,10);
+        const weekStart = new Date(now); weekStart.setDate(now.getDate() - ((now.getDay()||7)-1)); weekStart.setHours(0,0,0,0);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const toDay = state.expenses.filter(e => e.date.slice(0,10) === todayS).reduce((s,e) => s+e.amount, 0);
+        const toWeek = state.expenses.filter(e => new Date(e.date) >= weekStart).reduce((s,e) => s+e.amount, 0);
+        const toMonth = state.expenses.filter(e => new Date(e.date) >= monthStart).reduce((s,e) => s+e.amount, 0);
+        $('sum-today').textContent = fmt(toDay);
+        $('sum-week').textContent = fmt(toWeek);
+        $('sum-month').textContent = fmt(toMonth);
+    }
+
+    /* ── Home stats ── */
+    function renderHomeStats() {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const spent = state.expenses.filter(e => new Date(e.date) >= monthStart).reduce((s,e) => s+e.amount, 0);
+        const budget = Number(state.budget.monthly||0);
+        const pct = budget > 0 ? Math.min(spent/budget*100,100) : 0;
+
+        const grid = $('home-stats');
+        grid.innerHTML = `
+            <div class="stat-item">
+                <div class="stat-item-label">ចំណាយខែ</div>
+                <div class="stat-item-value">${fmt(spent)}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-item-label">ចំណាយទាំងអស់</div>
+                <div class="stat-item-value">${state.expenses.length} ដង</div>
+            </div>
+        `;
+    }
+
+    /* ── Budget & savings ── */
+    function renderBudget() {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const spent = state.expenses.filter(e => new Date(e.date) >= monthStart).reduce((s,e) => s+e.amount, 0);
+        const budget = Number(state.budget.monthly||0);
+        const target = Number(state.savings.target||0);
+        const saved = Number(state.savings.saved||0);
+
+        const budgetEl = $('budget-progress');
+        if (budget > 0) {
+            const pct = Math.min(spent/budget*100,100);
+            const rem = budget - spent;
+            const cls = pct >= 100 ? 'danger' : pct >= 80 ? 'warning' : '';
+            budgetEl.innerHTML = `
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>ថវិកាខែ: ${fmt(budget)}</span><span style="color:${rem<0?'var(--danger)':'inherit'}">នៅសល់: ${fmt(rem)}</span></div>
+                <div class="progress-track"><div class="progress-fill ${cls}" style="width:${pct}%"></div></div>
+                <div style="font-size:11px;margin-top:2px;">${pct.toFixed(0)}% used</div>
+            `;
+        } else {
+            budgetEl.innerHTML = `<span>ថវិកា: មិនទាន់កំណត់</span>`;
+        }
+
+        const savingsEl = $('savings-progress');
+        if (target > 0) {
+            const pct = Math.min(saved/target*100,100);
+            savingsEl.innerHTML = `
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>គោលដៅ: ${fmt(target)}</span><span>បានសន្សំ: ${fmt(saved)}</span></div>
+                <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:var(--success)"></div></div>
+                <div style="font-size:11px;margin-top:2px;">${pct.toFixed(0)}%</div>
+            `;
+        } else {
+            savingsEl.innerHTML = `<span>គោលដៅសន្សំ: មិនទាន់កំណត់</span>`;
+        }
+    }
+
+    /* ── Transactions ── */
+    function getFiltered() {
+        const now = new Date();
+        const todayS = now.toISOString().slice(0,10);
+        const weekStart = new Date(now); weekStart.setDate(now.getDate()-((now.getDay()||7)-1)); weekStart.setHours(0,0,0,0);
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const kw = state.ui.search.toLowerCase();
+
+        return state.expenses.filter(e => {
+            const d = e.date.slice(0,10);
+            const cat = getCat(e.category);
+            const matchKw = !kw || (e.notes||'').toLowerCase().includes(kw) || cat.name.toLowerCase().includes(kw);
+            const matchFilter =
+                state.ui.filter === 'all' ||
+                (state.ui.filter === 'today' && d === todayS) ||
+                (state.ui.filter === 'week' && new Date(e.date) >= weekStart) ||
+                (state.ui.filter === 'month' && new Date(e.date) >= monthStart);
+            return matchKw && matchFilter;
+        }).sort({
+            date_desc: (a,b) => new Date(b.date)-new Date(a.date),
+            date_asc:  (a,b) => new Date(a.date)-new Date(b.date),
+            amount_desc:(a,b)=> b.amount-a.amount,
+            amount_asc: (a,b)=> a.amount-b.amount,
+        }[state.ui.sort] || ((a,b) => new Date(b.date)-new Date(a.date)));
+    }
+
+    function renderTransactions() {
+        const list = $('transaction-list');
+        const filtered = getFiltered();
+
+        if (filtered.length === 0) {
+            list.innerHTML = `<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-title">មិនមានប្រតិបត្តិការ</div><div class="empty-sub">ចុច + ដើម្បីបន្ថែមចំណាយដំបូង</div></div>`;
+            return;
+        }
+
+        // Group by date
+        const groups = {};
+        filtered.forEach(e => {
+            const d = e.date.slice(0,10);
+            if (!groups[d]) groups[d] = [];
+            groups[d].push(e);
+        });
+
+        const todayS = new Date().toISOString().slice(0,10);
+        const yesterdayS = (() => { const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().slice(0,10); })();
+
+        let html = '';
+        Object.keys(groups).sort((a,b)=>b.localeCompare(a)).forEach(dateStr => {
+            const label = dateStr === todayS ? 'ថ្ងៃនេះ' : dateStr === yesterdayS ? 'ម្សិលមិញ' :
+                new Date(dateStr+'T12:00:00').toLocaleDateString(state.settings.locale, { day:'numeric', month:'long', year:'numeric' });
+            html += `<div class="date-label">${label}</div><div class="card" style="margin-top:0;">`;
+            groups[dateStr].forEach(e => {
+                const cat = getCat(e.category);
+                html += `<div class="expense-item" data-id="${e.id}">
+                    <div class="expense-icon">${cat.icon}</div>
+                    <div class="expense-info">
+                        <div class="expense-cat">${cat.name}</div>
+                        ${e.notes ? `<div class="expense-note">${e.notes}</div>` : ''}
+                    </div>
+                    <div class="expense-amount">${fmt(e.amount)}</div>
+                </div>`;
+            });
+            html += `</div>`;
+        });
+
+        list.innerHTML = html;
+
+        // Click → action popup
+        list.querySelectorAll('.expense-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const exp = state.expenses.find(e => e.id === el.dataset.id);
+                if (!exp) return;
+                if (typeof tg.showPopup === 'function') {
+                    tg.showPopup({
+                        title: 'ជ្រើសរើសសកម្មភាព',
+                        message: `${fmt(exp.amount)} ${exp.notes ? '— '+exp.notes : ''}`,
+                        buttons: [
+                            {id:'edit', type:'default', text:'✏️ កែសម្រួល'},
+                            {id:'dup', type:'default', text:'📋 ចម្លង'},
+                            {id:'del', type:'destructive', text:'🗑 លុប'},
+                            {type:'cancel'},
+                        ]
+                    }, (btn) => {
+                        if (btn === 'edit') openExpenseModal(exp);
+                        else if (btn === 'dup') duplicateExpense(exp.id);
+                        else if (btn === 'del') deleteExpense(exp.id);
+                    });
+                } else {
+                    const action = prompt('1=Edit 2=Delete 3=Dup');
+                    if (action === '1') openExpenseModal(exp);
+                    else if (action === '2') deleteExpense(exp.id);
+                    else if (action === '3') duplicateExpense(exp.id);
+                }
+            });
+        });
+    }
+
+    /* ── Analytics ── */
+    function renderAnalyticsStats() {
+        const n = state.expenses.length;
+        const total = state.expenses.reduce((s,e)=>s+e.amount,0);
+        const max = state.expenses.reduce((m,e)=>Math.max(m,e.amount),0);
+        const topCat = allCats().map(c=>({...c, tot:state.expenses.filter(e=>e.category===c.id).reduce((s,e)=>s+e.amount,0)})).sort((a,b)=>b.tot-a.tot)[0];
+        $('stat-count').textContent = n;
+        $('stat-avg').textContent = n ? fmt(total/n) : '-';
+        $('stat-max').textContent = fmt(max);
+        $('stat-top-cat').textContent = topCat?.tot > 0 ? `${topCat.icon} ${topCat.name}` : '-';
+    }
+
+    function renderChart() {
+        const now = new Date();
+        const mStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const mExps = state.expenses.filter(e => new Date(e.date) >= mStart);
+        const cats = allCats().map(c=>({...c, tot:mExps.filter(e=>e.category===c.id).reduce((s,e)=>s+e.amount,0)})).filter(c=>c.tot>0);
+
+        if (state.chartInstance) { state.chartInstance.destroy(); state.chartInstance = null; }
+        if (cats.length === 0) return;
+
+        const ctx = document.getElementById('expense-chart');
+        if (!ctx) return;
+        state.chartInstance = new Chart(ctx.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: cats.map(c=>c.name),
+                datasets: [{ data: cats.map(c=>c.tot), backgroundColor: cats.map(c=>c.color), borderColor: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim()||'#fff', borderWidth: 3 }]
+            },
+            options: { responsive:true, cutout:'60%', plugins:{ legend:{ position:'bottom', labels:{ font:{ family:"'Kantumruy Pro',sans-serif", size:12 }, padding:10 }}}}
+        });
+    }
+
+    /* ── Category dropdown ── */
+    function populateCatDropdown() {
+        const sel = $('inp-cat');
+        sel.innerHTML = '<option value="" disabled selected>-- ជ្រើសរើស --</option>';
+        allCats().forEach(c => sel.innerHTML += `<option value="${c.id}">${c.icon} ${c.name}</option>`);
+
+        const recSel = $('rec-cat');
+        recSel.innerHTML = '<option value="" disabled selected>ប្រភេទ</option>';
+        allCats().forEach(c => recSel.innerHTML += `<option value="${c.id}">${c.icon} ${c.name}</option>`);
+    }
+
+    /* ── Delete / Duplicate ── */
+    function deleteExpense(id) {
+        const doDelete = () => {
+            state.expenses = state.expenses.filter(e => e.id !== id);
+            persistExpenses(() => { renderAll(); hapticNotify('success'); });
+        };
+        if (!state.settings.confirmDelete) { doDelete(); return; }
+        showConfirm('លុបចំណាយនេះ?', ok => { if (ok) doDelete(); });
+    }
+
+    function duplicateExpense(id) {
+        const src = state.expenses.find(e=>e.id===id);
+        if (!src) return;
+        state.expenses.push({ id:uid(), amount:src.amount, category:src.category, notes:(src.notes||'')+'(copy)', date:new Date().toISOString() });
+        persistExpenses(() => { renderAll(); hapticNotify('success'); });
+    }
+
+    /* ── Recurring ── */
+    function renderRecurring() {
+        populateCatDropdown();
+        const el = $('rec-list');
+        if (state.recurring.length === 0) {
+            el.innerHTML = `<p style="color:var(--subtext);font-size:13px;">មិនមានចំណាយប្រចាំ។</p>`;
+            return;
+        }
+        el.innerHTML = '';
+        state.recurring.forEach(r => {
+            const cat = getCat(r.category);
+            const row = document.createElement('div');
+            row.className = 'manage-row';
+            row.innerHTML = `
+                <div>
+                    <div style="font-size:14px;font-weight:600;">${r.name}</div>
+                    <div style="font-size:12px;color:var(--subtext);">${fmt(r.amount)} · ${r.frequency} · ${cat.icon} ${cat.name}</div>
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button class="action-btn" data-run="${r.id}">Run</button>
+                    <button class="danger-btn" data-del-rec="${r.id}">Del</button>
+                </div>`;
+            el.appendChild(row);
+        });
+        el.querySelectorAll('[data-run]').forEach(b => b.addEventListener('click', () => runRecurring(b.dataset.run)));
+        el.querySelectorAll('[data-del-rec]').forEach(b => b.addEventListener('click', () => {
+            state.recurring = state.recurring.filter(r=>r.id!==b.dataset.delRec);
+            persistAux(); renderAll();
+        }));
+    }
+
+    function runRecurring(id) {
+        const r = state.recurring.find(x=>x.id===id);
+        if (!r) return;
+        state.expenses.push({ id:uid(), amount:Number(r.amount), category:r.category, notes:`[Recurring] ${r.name}`, date:new Date().toISOString() });
+        r.lastApplied = new Date().toISOString();
+        persistAux();
+        persistExpenses(() => { renderAll(); hapticNotify('success'); });
+    }
+
+    function isRecurringDue(r) {
+        if (!r.lastApplied) return true;
+        const last = new Date(r.lastApplied); const now = new Date();
+        if (r.frequency==='daily') return now.toDateString()!==last.toDateString();
+        if (r.frequency==='weekly') return (now-last)/(86400000)>=7;
+        if (r.frequency==='monthly') return now.getMonth()!==last.getMonth()||now.getFullYear()!==last.getFullYear();
+        return false;
+    }
+
+    $('btn-apply-recurring').addEventListener('click', () => {
+        const due = state.recurring.filter(isRecurringDue);
+        if (due.length===0){showAlert('គ្មានចំណាយប្រចាំដល់ពេល។');return;}
+        due.forEach(r => {
+            state.expenses.push({id:uid(),amount:Number(r.amount),category:r.category,notes:`[Recurring] ${r.name}`,date:new Date().toISOString()});
+            r.lastApplied = new Date().toISOString();
+        });
+        persistAux();
+        persistExpenses(()=>{renderAll();showAlert(`បានបន្ថែម ${due.length} ចំណាយប្រចាំ។`);});
+    });
+
+    $('btn-add-rec').addEventListener('click', () => {
+        const name = sanitize($('rec-name').value, 80);
+        const amount = parseFloat($('rec-amount').value);
+        const cat = $('rec-cat').value;
+        const freq = $('rec-freq').value;
+        if (!name||!amount||amount<=0||!cat) { showAlert('សូមបំពេញព័ត៌មានចំណាយប្រចាំ។'); return; }
+        state.recurring.push({ id:uid(), name, amount, category:cat, frequency:freq, lastApplied:null });
+        $('rec-name').value = ''; $('rec-amount').value = ''; $('rec-cat').value = '';
+        persistAux(); renderAll();
+    });
+
+    /* ── Custom cats ── */
+    function renderCustomCats() {
+        const el = $('custom-cat-list');
+        if (state.customCats.length===0) {
+            el.innerHTML = `<p style="color:var(--subtext);font-size:13px;">មិនមានប្រភេទផ្ទាល់ខ្លួន។</p>`;
+            return;
+        }
+        el.innerHTML = '';
+        state.customCats.forEach(c => {
+            const row = document.createElement('div');
+            row.className = 'manage-row';
+            row.innerHTML = `<span>${c.icon} ${c.name}</span><button class="danger-btn" data-del-cat="${c.id}">Remove</button>`;
+            el.appendChild(row);
+        });
+        el.querySelectorAll('[data-del-cat]').forEach(b => b.addEventListener('click', () => removeCat(b.dataset.delCat)));
+    }
+
+    function removeCat(id) {
+        const affected = state.expenses.filter(e=>e.category===id).length;
+        state.customCats = state.customCats.filter(c=>c.id!==id);
+        state.expenses = state.expenses.map(e=>e.category===id?{...e,category:DEFAULT_CAT}:e);
+        persistAux();
+        persistExpenses(()=>{ renderAll(); if(affected>0) showAlert(`ចំណាយ ${affected} ត្រូវបានប្ដូរទៅ "ផ្សេងៗ"។`); });
+    }
+
+    $('btn-add-cat').addEventListener('click', () => {
+        const name = sanitize($('new-cat-name').value, 60);
+        if (!name) { showAlert('សូមបញ្ចូលឈ្មោះប្រភេទ។'); return; }
+        state.customCats.push({ id:uid('cat'), name, icon:'🏷️', color:`hsl(${Math.random()*360|0} 65% 58%)` });
+        $('new-cat-name').value = '';
+        persistAux(); renderAll();
+    });
+
+    /* ── Settings ── */
+    function renderSettings() {
+        $('budget-input').value = state.budget.monthly||'';
+        $('savings-target').value = state.savings.target||'';
+        $('savings-current').value = state.savings.saved||'';
+        $('sel-currency').value = state.settings.currency;
+        $('sel-locale').value = state.settings.locale;
+        $('chk-confirm-delete').checked = state.settings.confirmDelete !== false;
+    }
+
+    $('btn-save-budget').addEventListener('click', () => {
+        state.budget.monthly = Number($('budget-input').value)||0;
+        persistAux(); renderAll(); hapticNotify('success');
+    });
+
+    $('btn-save-savings').addEventListener('click', () => {
+        state.savings.target = Number($('savings-target').value)||0;
+        state.savings.saved = Number($('savings-current').value)||0;
+        persistAux(); renderAll(); hapticNotify('success');
+    });
+
+    $('btn-save-settings').addEventListener('click', () => {
+        state.settings.currency = $('sel-currency').value;
+        state.settings.locale = $('sel-locale').value;
+        state.settings.confirmDelete = $('chk-confirm-delete').checked;
+        persistAux(); renderAll(); hapticNotify('success'); showAlert('បានរក្សាទុកការកំណត់!');
+    });
+
+    $('btn-clear-filters').addEventListener('click', () => {
+        state.ui.filter = 'all'; state.ui.search = ''; state.ui.sort = 'date_desc';
+        $('search-input').value = ''; $('sort-select').value = 'date_desc';
+        $$('.chip').forEach(c=>c.classList.toggle('active', c.dataset.filter==='all'));
+        renderTransactions();
+    });
+
+    $('btn-reset-month').addEventListener('click', () => {
+        showConfirm('លុបចំណាយទាំងអស់ក្នុងខែនេះ?', ok => {
+            if (!ok) return;
+            const mp = new Date().toISOString().slice(0,7);
+            state.expenses = state.expenses.filter(e=>!e.date.startsWith(mp));
+            persistExpenses(()=>renderAll());
+        });
+    });
+
+    /* ── Export / Import ── */
+    $('btn-export').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify({ exportedAt:new Date().toISOString(), expenses:state.expenses, customCats:state.customCats, recurring:state.recurring, budget:state.budget, savings:state.savings, settings:state.settings }, null, 2)], {type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `spending-backup-${todayStr()}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+
+    $('btn-import').addEventListener('click', () => $('import-file').click());
+    $('import-file').addEventListener('change', e => {
+        const file = e.target.files?.[0]; if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const p = JSON.parse(reader.result);
+                if (Array.isArray(p.expenses)) state.expenses = p.expenses;
+                if (Array.isArray(p.customCats)) state.customCats = p.customCats;
+                if (Array.isArray(p.recurring)) state.recurring = p.recurring;
+                if (p.budget) state.budget = p.budget;
+                if (p.savings) state.savings = p.savings;
+                if (p.settings) state.settings = { ...state.settings, ...p.settings };
+                persistAux();
+                persistExpenses(() => { renderAll(); showAlert('Import ជោគជ័យ!'); });
+            } catch(err) { showAlert('ឯកសារ JSON មិនត្រឹមត្រូវ។'); }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+
+    /* ── Report ── */
+    $('btn-gen-report').addEventListener('click', () => {
+        const period = $('report-period').value;
+        const now = new Date();
+        let start, end, label;
+        switch(period) {
+            case 'today':     start=new Date(now.getFullYear(),now.getMonth(),now.getDate()); end=new Date(start.getTime()+86399999); label='ថ្ងៃនេះ'; break;
+            case 'yesterday': { const y=new Date(now); y.setDate(y.getDate()-1); start=new Date(y.getFullYear(),y.getMonth(),y.getDate()); end=new Date(start.getTime()+86399999); label='ម្សិលមិញ'; break; }
+            case 'week':      { const ws=new Date(now); ws.setDate(now.getDate()-((now.getDay()||7)-1)); ws.setHours(0,0,0,0); start=ws; end=new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59,999); label='សប្តាហ៍នេះ'; break; }
+            case 'last-week': { const lwe=new Date(now); lwe.setDate(now.getDate()-(now.getDay()||7)); lwe.setHours(23,59,59,999); const lws=new Date(lwe); lws.setDate(lwe.getDate()-6); lws.setHours(0,0,0,0); start=lws; end=lwe; label='សប្តាហ៍មុន'; break; }
+            case 'month':     start=new Date(now.getFullYear(),now.getMonth(),1); end=new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59,999); label='ខែនេះ'; break;
+            case 'last-month':start=new Date(now.getFullYear(),now.getMonth()-1,1); end=new Date(now.getFullYear(),now.getMonth(),0,23,59,59,999); label='ខែមុន'; break;
+            default:          start=new Date(0); end=now; label='ទាំងអស់';
+        }
+        const exps = state.expenses.filter(e=>{const d=new Date(e.date);return d>=start&&d<=end;});
+        if (exps.length===0){showAlert('គ្មានទិន្នន័យក្នុងរយៈពេលនេះ។');return;}
+
+        const total = exps.reduce((s,e)=>s+e.amount,0);
+        const days = Math.max(1,Math.ceil((end-start)/86400000));
+        const catLines = allCats().map(c=>({...c,tot:exps.filter(e=>e.category===c.id).reduce((s,e)=>s+e.amount,0),cnt:exps.filter(e=>e.category===c.id).length})).filter(c=>c.tot>0).sort((a,b)=>b.tot-a.tot);
+        const hiExp = [...exps].sort((a,b)=>b.amount-a.amount)[0];
+        const loExp = [...exps].sort((a,b)=>a.amount-b.amount)[0];
+
+        let report = `📊 របាយការណ៍ — ${label}\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+        report += `💰 សរុប: ${fmt(total)}\n📝 ចំនួន: ${exps.length} ដង\n📅 ${days} ថ្ងៃ\n📊 មធ្យម/ថ្ងៃ: ${fmt(total/days)}\n\n`;
+        report += `📋 តាមប្រភេទ:\n━━━━━━━━━━━━━━━━━━━━\n`;
+        catLines.forEach(c => {
+            report += `${c.icon} ${c.name}: ${fmt(c.tot)} (${(c.tot/total*100).toFixed(1)}%)\n`;
+        });
+        report += `\n🔝 ខ្ពស់: ${fmt(hiExp.amount)} — ${getCat(hiExp.category).name}\n`;
+        if (hiExp.notes) report += `  "${hiExp.notes}"\n`;
+        report += `🔻 ទាប: ${fmt(loExp.amount)} — ${getCat(loExp.category).name}\n`;
+
+        closeSheet(repOverlay, repSheet);
+
+        if (typeof tg.showPopup === 'function') {
+            tg.showPopup({
+                title:'របាយការណ៍ចំណាយ',
+                message: report.slice(0,512),
+                buttons:[{type:'close',text:'បិទ'}]
+            });
+        } else {
+            alert(report.slice(0,1000));
+        }
+    });
+
+    /* ── Filter chips & search & sort ── */
+    $$('.chip').forEach(c => c.addEventListener('click', () => {
+        state.ui.filter = c.dataset.filter;
+        $$('.chip').forEach(x=>x.classList.remove('active'));
+        c.classList.add('active');
+        renderTransactions();
+    }));
+
+    $('search-input').addEventListener('input', e => {
+        state.ui.search = e.target.value;
+        renderTransactions();
+    });
+
+    $('sort-select').addEventListener('change', e => {
+        state.ui.sort = e.target.value;
+        renderTransactions();
+    });
+
+    /* ── Start ── */
+    loadData();
+})();
+</script>
 </body>
 </html>
