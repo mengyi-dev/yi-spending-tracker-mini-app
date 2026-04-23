@@ -83,7 +83,7 @@
             height: 100%;
             width: 0%;
             border-radius: 999px;
-            background: linear-gradient(90deg, #34c759, #ffcc00, #ff3b30);
+            background: linear-gradient(90deg, var(--button-color), color-mix(in srgb, var(--button-color) 65%, #ffcc00 35%), var(--danger-color));
             transition: width 0.25s ease;
         }
 
@@ -301,6 +301,7 @@
             const isStorageSupported = tg.isVersionAtLeast('6.9');
             const CLOUD_SOFT_LIMIT_BYTES = 32 * 1024;
             const STORAGE_WARNING_THRESHOLD = 0.8;
+            const MIN_STORAGE_BAR_PERCENT = 2;
             const LOCAL_STORAGE_KEY = 'yi_spending_tracker_expenses';
 
             const state = {
@@ -503,12 +504,11 @@
                 });
             }
 
-            function updateStorageUsageUI(notify = false) {
-                const payload = JSON.stringify(state.expenses);
-                const usedBytes = new TextEncoder().encode(payload).length;
-                const usageRatio = Math.min(usedBytes / CLOUD_SOFT_LIMIT_BYTES, 1);
-                storageUsageFill.style.width = `${Math.max(usageRatio * 100, 2)}%`;
-                storageUsageText.textContent = `${formatStorage(usedBytes)} / ${formatStorage(CLOUD_SOFT_LIMIT_BYTES)}`;
+            function updateStorageUsageUI(notify = false, usedBytes = null) {
+                const bytes = usedBytes ?? new TextEncoder().encode(JSON.stringify(state.expenses)).length;
+                const usageRatio = Math.min(bytes / CLOUD_SOFT_LIMIT_BYTES, 1);
+                storageUsageFill.style.width = `${Math.max(usageRatio * 100, MIN_STORAGE_BAR_PERCENT)}%`;
+                storageUsageText.textContent = `${formatStorage(bytes)} / ${formatStorage(CLOUD_SOFT_LIMIT_BYTES)}`;
                 storageModeText.textContent = state.storageMode === 'cloud'
                     ? 'Storage: Telegram Cloud'
                     : state.storageMode === 'local'
@@ -777,7 +777,7 @@
                 if (bytes >= CLOUD_SOFT_LIMIT_BYTES) {
                     state.storageMode = 'local';
                     safeLocalStorageSet(dataToSave);
-                    updateStorageUsageUI(true);
+                    updateStorageUsageUI(true, bytes);
                     runCallback();
                     return;
                 }
@@ -789,7 +789,9 @@
                         safeAlert('Cloud Storage មានបញ្ហា។ កម្មវិធីបានប្ដូរទៅ Local Storage បណ្តោះអាសន្ន។');
                     } else {
                         state.storageMode = 'cloud';
-                        safeLocalStorageSet(dataToSave);
+                        if (!safeLocalStorageSet(dataToSave)) {
+                            console.warn('Local backup storage save failed.');
+                        }
                     }
                     runCallback();
                 });
@@ -836,9 +838,7 @@
                         state.expenses = [];
                     }
                  }
-                 if (storedValue) state.storageMode = 'cloud';
-                 else if (localValue) state.storageMode = 'local';
-                 else state.storageMode = isCloudAvailable() ? 'cloud' : 'local';
+                 state.storageMode = isCloudAvailable() ? 'cloud' : 'local';
                  if (!localValue && state.expenses.length > 0) safeLocalStorageSet(JSON.stringify(state.expenses));
                  render();
             }
